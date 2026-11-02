@@ -17,6 +17,7 @@ from lynqx._src.axis_util import (
     axis_names,
     axis_shape_to_tuple,
     axis_sizes,
+    check_unique_axis_names,
     match_axes,
     remove_axes,
     resolve_axes,
@@ -58,6 +59,35 @@ def iscomplexobj(x: Any) -> bool:
     """
 
     return jnp.iscomplexobj(x)
+
+
+def isreal(a: NamedArrayLike) -> NamedArray:
+    """Return a boolean array showing where the input is real.
+
+    Args:
+        x: The input array or scalar.
+
+    Returns:
+        A boolean ``NamedArray`` indicating whether ``a`` is elementwise real.
+    """
+
+    a = util.ensure_named("isreal", a)
+    return constructors.array(jnp.isreal(a.array), a.axes)
+
+
+def isrealobj(a: Any) -> bool:
+    """Check whether the input is a complex number or contains complex elements.
+
+    The decision is based on the input's dtype rather than its values, so arrays with zero imaginary parts are still
+    considered complex.
+
+    Args:
+        x: The input to test.
+
+    Returns:
+        ``True`` if ``x`` has a complex dtype, otherwise ``False``.
+    """
+    return jnp.isrealobj(a)
 
 
 # Broadcasting support
@@ -534,8 +564,8 @@ def _tri_mask(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, k: in
     row = creation.iota(spec, row_pos, dtype=jnp.int32)
     col = creation.iota(spec, col_pos, dtype=jnp.int32)
 
-    diff = row - col
-    mask = (diff <= k) if upper else (diff >= k)
+    diff = col - row
+    mask = (diff >= k) if upper else (diff <= k)
     return broadcast_to(mask, array.axes)
 
 
@@ -594,6 +624,59 @@ def tri(shape: AxisShape, axes: AxisSelection = (-1, -2), k: int = 0, dtype: DTy
     diag = creation.ones(shape, dtype=dtype)
     mask = _tri_mask(diag, a, b, k, upper=False)
     return mask * diag
+
+
+def tril_indices(
+    n: int, k: int = 0, m: int | None = None, axis: AxisLike | tuple[AxisLike, AxisLike] | None = None
+) -> tuple[NamedArray, NamedArray]:
+    """Return the row and column indices of a lower-triangular matrix.
+
+    Args:
+        n: The row dimension of the matrix.
+        k: Diagonal offset. Defaults to ``0``.
+        m: The column dimension. Defaults to ``n``.
+        axis: Optional axis or pair of axes to attach to the returned index arrays.
+
+    Returns:
+        A pair of ``NamedArray`` objects containing the row and column indices of the selected lower triangle.
+    """
+
+    m = n if m is None else m
+    row_jax, col_jax = jnp.tril_indices(n, k, m)
+
+    axis_tuple = axis if isinstance(axis, tuple) else (axis, axis)
+    size_tuple = [row_jax.shape[0], col_jax.shape[0]]
+    row_axis, col_axis = [
+        util.resolve_new_axis(ax, sz, "tril_indices", "axis") for ax, sz in zip(axis_tuple, size_tuple)
+    ]
+
+    return constructors.array(row_jax, row_axis), constructors.array(col_jax, col_axis)
+
+
+def triu_indices(
+    n: int, k: int = 0, m: int | None = None, axis: AxisLike | tuple[AxisLike, AxisLike] | None = None
+) -> tuple[NamedArray, NamedArray]:
+    """Return the row and column indices of an upper-triangular matrix.
+
+    Args:
+        n: The row dimension of the matrix.
+        k: Diagonal offset. Defaults to ``0``.
+        m: The column dimension. Defaults to ``n``.
+        axis: Optional axis or pair of axes to attach to the returned index arrays.
+
+    Returns:
+        A pair of ``NamedArray`` objects containing the row and column indices of the selected upper triangle.
+    """
+
+    row_jax, col_jax = jnp.triu_indices(n, k, m)
+
+    axis_tuple = axis if isinstance(axis, tuple) else (axis, axis)
+    size_tuple = [row_jax.shape[0], col_jax.shape[0]]
+    row_axis, col_axis = [
+        util.resolve_new_axis(ax, sz, "tril_indices", "axis") for ax, sz in zip(axis_tuple, size_tuple)
+    ]
+
+    return constructors.array(row_jax, row_axis), constructors.array(col_jax, col_axis)
 
 
 def transpose(a: NamedArrayLike, permutation: AxisSelection | None = None):
@@ -776,6 +859,21 @@ def ravel(a: NamedArrayLike, name: AxisLike | None = None) -> NamedArray:
         flat_axis = Axis(named.size, name)
     jax_array = jnp.ravel(named.array)
     return constructors.array(jax_array, (flat_axis,))
+
+
+def flatten(a: NamedArrayLike, name: AxisLike | None = None):
+    """Flatten an array into a single axis.
+
+    This is a convenience alias for :func:`ravel`.
+
+    Args:
+        a: The array to flatten.
+        name: Optional name for the resulting single axis.
+
+    Returns:
+        A ``NamedArray`` with one axis containing all elements of ``a``.
+    """
+    return ravel(a, name)
 
 
 def _normalize_insert_index(index: int, ndim: int, fn_name: str) -> int:
@@ -1344,6 +1442,49 @@ def compress(
     return constructors.array(jax_array, out_axes)
 
 
+def extract(
+    condition: NamedArrayLike,
+    a: NamedArrayLike,
+    *,
+    size: int | None = None,
+    fill_value: NamedArrayLike = 0.0,
+):
+    """Extract elements from an array where a boolean condition is ``True``.
+
+    Args:
+        condition: One-dimensional boolean mask selecting entries along the target axis.
+        a: The array to extract from.
+        size: Optional static output length. If omitted, it is inferred from the number of ``True`` values.
+        fill_value: Value used to pad the extracted result to ``size``.
+
+    Returns:
+        A ``NamedArray`` formed by extracting the selected entries along the condition axis.
+    """
+    cond, a, fill_value = util.ensure_named("extract", condition, a, fill_value)
+    if cond.ndim != 1:
+        raise ValueError(f"compress: `condition` must be 1D, got {cond.ndim} axes")
+
+    idx = axis_index(a.axes, cond.axes[0])
+    if idx is None:
+        raise ValueError(f"extract: axis {cond.axes[0]} not found in {a.axes}")
+
+    cond_name, target = cond.axes[0].name, a.axes[idx]
+    if cond_name is not None and target.name is not None and cond_name != target.name:
+        raise ValueError(f"compress: `condition` axis {cond_name!r} does not match the selected axis {target.name!r}")
+
+    if size is None:
+        try:
+            size = int(jnp.count_nonzero(cond.array))
+        except jax.errors.ConcretizationTypeError as err:
+            raise ValueError("compress: pass an explicit `size` when calling under `jax.jit`") from err
+    if size < 1:
+        raise ValueError(f"compress: result would have {size} slices along {target.label!r}; axes must be non-empty")
+
+    jax_array = jnp.extract(cond.array, a.array, size=size, fill_value=fill_value.array)
+    out_axes = a.axes[:idx] + (target.resize(size),) + a.axes[idx + 1 :]
+    return constructors.array(jax_array, out_axes)
+
+
 @overload
 def where(condition: NamedArrayLike, x: NamedArrayLike, y: NamedArrayLike, /) -> NamedArray: ...
 
@@ -1459,21 +1600,83 @@ def angle(a: NamedArrayLike, deg: bool = False) -> NamedArray:
     return eqx.tree_at(lambda x: x.array, a, replace_fn=lambda x: jnp.angle(x, deg))
 
 
-# sorting
-
-
-def sort(a: NamedArrayLike) -> NamedArray:
-    """Return a sorted copy of an array along its last axis.
+def gcd(a1: NamedArrayLike, a2: NamedArrayLike):
+    """Compute the element-wise greatest common divisor of two arrays.
 
     Args:
-        a: The input array.
+        a1: The first input array.
+        a2: The second input array.
 
     Returns:
-        A `NamedArray` with elements sorted along the last axis.
+        A ``NamedArray`` containing the element-wise GCD of ``a1`` and ``a2``.
     """
+    (a1, a2), out_axes = broadcast_arrays_and_shape(a1, a2)
 
-    a = util.ensure_named("sort", a)
-    return eqx.tree_at(lambda x: x.array, a, replace_fn=lambda x: jnp.sort(x))
+    jax_array = jnp.gcd(a1.array, a2.array)
+    return constructors.array(jax_array, out_axes)
+
+
+def lcm(a1: NamedArrayLike, a2: NamedArrayLike):
+    """Compute the element-wise least common multiple of two arrays.
+
+    Args:
+        a1: The first input array.
+        a2: The second input array.
+
+    Returns:
+        A ``NamedArray`` containing the element-wise LCM of ``a1`` and ``a2``.
+    """
+    (a1, a2), out_axes = broadcast_arrays_and_shape(a1, a2)
+
+    jax_array = jnp.lcm(a1.array, a2.array)
+    return constructors.array(jax_array, out_axes)
+
+
+def meshgrid(
+    *xi: NamedArrayLike, sparse: bool = False, indexing: Literal["xy", "ij"] = "xy"
+) -> tuple[NamedArray, ...]:
+    """Return coordinate arrays over the grid spanned by one-dimensional coordinate vectors.
+
+    Like `jax.numpy.meshgrid`, but every input carries its own `Axis`, so the grid axes are the inputs' axes and
+    no extra bookkeeping is needed to say which output dimension belongs to which coordinate.
+
+    Args:
+        *xi: One-dimensional ``NamedArray``s of coordinates. Their axes must be distinct (both by value and by name).
+        sparse: If ``True``, return the inputs unchanged. Broadcasting by axis name already makes them behave like the
+            sparse grid of NumPy, so no size-1 axes are needed.
+        indexing: ``"xy"`` (the ``jax.numpy`` default) puts the second input's axis first and the first input's axis
+            second in the output, with the remaining axes in input order. ``"ij"`` keeps input order. This only
+            changes the memory layout of the outputs, not which axis carries which coordinate.
+
+    Returns:
+        A tuple of ``len(xi)`` arrays, one per input, each broadcast over the axes of all inputs (or the inputs
+        themselves if ``sparse``).
+
+    Raises:
+        ValueError: If an input is not one-dimensional, if two inputs share an axis, or if ``indexing`` is invalid.
+    """
+    xi = util.ensure_named_tuple("meshgrid", xi)
+    if indexing not in ("xy", "ij"):
+        raise ValueError(f"meshgrid: `indexing` must be 'xy' or 'ij', got {indexing!r}")
+    for pos, x in enumerate(xi):
+        if x.ndim != 1:
+            raise ValueError(f"meshgrid: inputs must be one-dimensional, got shape {x.shape} at position {pos}")
+
+    axes = tuple(x.axes[0] for x in xi)
+    if len(set(axes)) != len(axes):
+        raise ValueError(f"meshgrid: inputs must have distinct axes, got {axes}")
+    check_unique_axis_names(axes)
+
+    if sparse:
+        return xi
+
+    grids = jnp.meshgrid(*(x.array for x in xi), indexing=indexing)
+    if indexing == "xy" and len(axes) > 1:
+        axes = (axes[1], axes[0], *axes[2:])
+    return tuple(constructors.array(g, axes) for g in grids)
+
+
+# sorting
 
 
 def sort_complex(a: NamedArrayLike) -> NamedArray:
