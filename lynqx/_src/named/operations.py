@@ -17,7 +17,6 @@ from lynqx._src.axis_util import (
     axis_names,
     axis_shape_to_tuple,
     axis_sizes,
-    check_unique_axis_names,
     match_axes,
     remove_axes,
     resolve_axes,
@@ -38,7 +37,7 @@ def iscomplex(a: NamedArrayLike) -> NamedArray:
         x: The input array or scalar.
 
     Returns:
-        A zero-dimensional boolean ``NamedArray`` indicating whether ``a`` is complex.
+        A boolean ``NamedArray`` indicating whether ``a`` is elemetwise complex.
     """
 
     a = util.ensure_named("iscomplex", a)
@@ -88,6 +87,20 @@ def isrealobj(a: Any) -> bool:
         ``True`` if ``x`` has a complex dtype, otherwise ``False``.
     """
     return jnp.isrealobj(a)
+
+
+def ndim(x: NamedArrayLike) -> int:
+    """Return the number of axes in an array.
+
+    Args:
+        x: The array or scalar to inspect.
+
+    Returns:
+        The number of dimensions in ``x``.
+    """
+    if isinstance(x, NamedArray):
+        return x.array.ndim
+    return jnp.ndim(x)
 
 
 # Broadcasting support
@@ -552,6 +565,7 @@ def diagonal(
 
 
 def _tri_mask(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, k: int, *, upper: bool) -> NamedArray:
+    """Build a mask selecting the upper or lower triangle of a matrix-like array."""
     idx0, idx1 = axis_indices(array.axes, (axis1, axis2))
     if idx0 == idx1:
         raise ValueError(f"axis1 and axis2 must be distinct, both resolved to position {idx0}")
@@ -679,6 +693,56 @@ def triu_indices(
     return constructors.array(row_jax, row_axis), constructors.array(col_jax, col_axis)
 
 
+def tril_indices_from(
+    a: NamedArrayLike,
+    k: int = 0,
+    axis: AxisLike | tuple[AxisLike, AxisLike] | None = None,
+) -> tuple[NamedArray, NamedArray]:
+    """Return the indices of the lower triangle of a 2-D array.
+
+    Args:
+        a: Input array. Must have ``a.ndim == 2`
+        k: Optional value that specifies the sub-diagonal on and above which the indices of the upper triangle are
+            returned. ``k=0`` refers to the main diagonal. ``k<0`` refers to the sub-diagonal below the main diagonal
+            and ``k>0`` refers to the sub-diagonal above the main diagonal.
+
+    Returns:
+        A tuple of two ``NamedArrays`` containing the indices of the lower triangle, one along each axis.
+    """
+    named = util.ensure_named("tril_indices_from", a)
+
+    if named.ndim != 2:
+        raise ValueError("tril_indices_from requires a two-dimensional array")
+
+    return tril_indices(named.axes[0].size, k, named.axes[1].size, axis)
+
+
+def triu_indices_from(
+    a: NamedArrayLike,
+    k: int = 0,
+    axis: AxisLike | tuple[AxisLike, AxisLike] | None = None,
+) -> tuple[NamedArray, NamedArray]:
+    """Return the indices of the upper triangle of a 2-D array.
+
+    Args:
+        a: Input array. Must have ``a.ndim == 2`
+        k: Optional value that specifies the sub-diagonal on and above which the indices of the upper triangle are
+            returned. ``k=0`` refers to the main diagonal. ``k<0`` refers to the sub-diagonal below the main diagonal
+            and ``k>0`` refers to the sub-diagonal above the main diagonal.
+
+    Returns:
+        A tuple of two ``NamedArrays`` containing the indices of the upper triangle, one along each axis.
+
+    """
+
+    named = util.ensure_named("triu_indices_from", a)
+
+    if named.ndim != 2:
+        raise ValueError("triu_indices_from requires a two-dimensional array")
+
+    return triu_indices(named.axes[0].size, k, named.axes[1].size, axis)
+
+
 def transpose(a: NamedArrayLike, permutation: AxisSelection | None = None):
     """Transpose a NamedArray according to the given axis permutation.
 
@@ -768,6 +832,7 @@ PadSpec = PadValue | PadMapping
 
 
 def _resolve_pad_width(val: PadValue) -> tuple[int, int]:
+    """Normalize a per-axis pad width to a ``(before, after)`` tuple."""
     if isinstance(val, int):
         if val < 0:
             raise ValueError(f"Pad width must be non-negative, got {val}")
@@ -780,6 +845,7 @@ def _resolve_pad_width(val: PadValue) -> tuple[int, int]:
 
 
 def _normalize_pad_width(axes: tuple[Axis, ...], pad_width: PadSpec) -> tuple[tuple[int, int], ...]:
+    """Normalize padding values for all axes in an array."""
     if not isinstance(pad_width, Mapping):
         if isinstance(pad_width, tuple) and len(pad_width) != 2:
             raise ValueError(
@@ -799,6 +865,7 @@ def _normalize_pad_width(axes: tuple[Axis, ...], pad_width: PadSpec) -> tuple[tu
 
 
 def _pad_callable(named, widths, fn, kwargs):
+    """Apply a padding callable one axis at a time while validating the output shape."""
     out = named
     for ax, (lo, hi) in zip(named.axes, widths):
         if lo == 0 and hi == 0:
@@ -1017,15 +1084,15 @@ def unstack(a: NamedArrayLike, axis: AxisSelector = 0) -> tuple[NamedArray, ...]
 TileReps = int | Sequence[int] | Mapping[AxisSelector, int]
 
 
-def tile(a: NamedArrayLike, reps: TileReps, *, out_sharding: ShardingLike | None = None) -> NamedArray:
+def tile(a: NamedArrayLike, repeats: TileReps, *, out_sharding: ShardingLike | None = None) -> NamedArray:
     """Repeat an array along its existing axes.
 
-    Unlike `numpy.tile`, this never prepends axes: ``reps`` is always interpreted per existing axis, and each
+    Unlike `numpy.tile`, this never prepends axes: ``repeats`` is always interpreted per existing axis, and each
     axis of size ``n`` with repetition ``r`` becomes an axis of size ``n * r`` (names are preserved).
 
     Args:
         a: The array to tile.
-        reps: Either a single int applied to every axis, a sequence with one entry per axis (in axis order), or
+        repeats: Either a single int applied to every axis, a sequence with one entry per axis (in axis order), or
             a mapping from axis selectors to repetitions, where unlisted axes are repeated once.
         out_sharding: Optional sharding specification for the output array.
 
@@ -1035,25 +1102,25 @@ def tile(a: NamedArrayLike, reps: TileReps, *, out_sharding: ShardingLike | None
     named = util.ensure_named("tile", a)
     ndim = len(named.axes)
 
-    if isinstance(reps, Mapping):
+    if isinstance(repeats, Mapping):
         per_axis = [1] * ndim
         seen: set[int] = set()
-        for key, r in reps.items():
+        for key, r in repeats.items():
             idx = axis_index(named.axes, key)
             if idx is None:
                 raise ValueError(f"tile: axis {key!r} not found in {named.axes}")
             if idx in seen:
-                raise ValueError(f"tile: axis {named.axes[idx].label!r} appears more than once in `reps`")
+                raise ValueError(f"tile: axis {named.axes[idx].label!r} appears more than once in `repeats`")
             seen.add(idx)
             per_axis[idx] = r
         rep_tuple = tuple(per_axis)
-    elif isinstance(reps, int):
-        rep_tuple = (reps,) * ndim
+    elif isinstance(repeats, int):
+        rep_tuple = (repeats,) * ndim
     else:
-        rep_tuple = tuple(reps)
+        rep_tuple = tuple(repeats)
         if len(rep_tuple) != ndim:
             raise ValueError(
-                f"tile: `reps` has {len(rep_tuple)} entries but the array has {ndim} axes; "
+                f"tile: `repeats` has {len(rep_tuple)} entries but the array has {ndim} axes; "
                 f"use a mapping to repeat only some axes"
             )
 
@@ -1115,7 +1182,20 @@ def concat(
     *,
     out_sharding: ShardingLike | None = None,
 ) -> NamedArray:
-    """Alias of `concatenate`."""
+    """Alias of `concatenate`.
+
+    Args:
+        arrays: The arrays to concatenate.
+        axis: The axis along which to concatenate.
+        dtype: Optional dtype of the result.
+        out_sharding: Optional sharding specification for the result.
+
+    Returns:
+        A ``NamedArray`` containing the concatenated arrays.
+
+    Raises:
+        ValueError: If the arrays cannot be concatenated along ``axis``.
+    """
     return concatenate(arrays, axis, dtype, out_sharding=out_sharding)
 
 
@@ -1146,6 +1226,14 @@ BlockSpec = NamedArrayLike | Sequence[NamedArrayLike]
 
 
 def _block_depth(x: Any) -> int:
+    """Determine the nesting depth of a block specification.
+
+    Args:
+        x: A block or nested sequence of blocks.
+
+    Returns:
+        The maximum nesting depth of the block specification.
+    """
     if isinstance(x, (list, tuple)):
         if not x:
             raise ValueError("block: empty lists are not allowed")
@@ -1190,12 +1278,114 @@ def block(
         raise ValueError(f"block: `arrays` is nested {depth} deep but {len(axes)} axes were given")
 
     def build(x: Any, level: int, sharding: ShardingLike | None) -> NamedArray:
+        """Recursively assemble a nested block array into a single ``NamedArray``.
+
+        Args:
+            x: The current block subtree being assembled.
+            level: The current nesting depth within the block specification.
+            sharding: Optional sharding to apply to the final concatenation.
+
+        Returns:
+            The assembled array at or below the current nesting level.
+        """
         if level == depth:
             return util.ensure_named("block", x)
         parts = [build(e, level + 1, None) for e in x]
         return concatenate(parts, axes[level], out_sharding=sharding)
 
     return build(arrays, 0, out_sharding)
+
+
+def repeat(
+    a: NamedArrayLike,
+    repeats: NamedArrayLike,
+    axis: AxisSelector | None = None,
+    *,
+    total_repeat_length: int | None = None,
+    out_sharding: ShardingLike | None = None,
+) -> NamedArray:
+    """Repeat each element of an axis, like `jax.numpy.repeat` (each element is repeated in place, unlike `tile`).
+
+    Unlike NumPy, ``axis=None`` does not flatten the array (that would silently drop every axis name): it is only
+    accepted for 1-D arrays; use `ravel` first otherwise. The repeated axis keeps its name and order.
+
+    Args:
+        a: The array whose elements are repeated.
+        repeats: Non-negative repetition counts: a Python int / 0-d array applied to every element, or a 1-D array
+            with one count per element of ``axis`` (or a single count). If the 1-D array has a named axis, that
+            name must match the repeated axis.
+        axis: The axis to repeat along. May be omitted for 1-D arrays.
+        total_repeat_length: Static size of the repeated axis. Required whenever it cannot be inferred from
+            concrete values, e.g. ``repeats`` is an array inside ``jit``. If it differs from ``sum(repeats)`` the
+            output is truncated or padded with the last element, as in JAX.
+        out_sharding: Optional sharding specification for the output array.
+
+    Returns:
+        An array with the axes of ``a`` where ``axis`` has size ``sum(repeats)`` (``total_repeat_length`` if given).
+    """
+    named = util.ensure_named("repeat", a)
+    if axis is None:
+        if named.ndim != 1:
+            raise ValueError(
+                f"repeat: `axis` must be given for arrays with {named.ndim} axes (axis=None would flatten and drop "
+                "axis names; call `ravel` first if that is intended)"
+            )
+        idx = 0
+    else:
+        idx = axis_index(named.axes, axis)
+        if idx is None:
+            raise ValueError(f"repeat: axis {axis!r} not found in {named.axes}")
+    target = named.axes[idx]
+
+    if isinstance(total_repeat_length, bool) or not (
+        total_repeat_length is None or isinstance(total_repeat_length, int)
+    ):
+        raise TypeError(f"repeat: `total_repeat_length` must be an int or None, got {total_repeat_length!r}")
+    if total_repeat_length is not None and total_repeat_length < 0:
+        raise ValueError(f"repeat: `total_repeat_length` must be non-negative, got {total_repeat_length}")
+
+    repeats = util.ensure_named("repeat", repeats)
+    if repeats.ndim > 1:
+        raise ValueError(f"repeat: `repeats` must be a scalar or 1-D, got axes {repeats.axes}")
+    if repeats.ndim == 1:
+        r_ax = repeats.axes[0]
+        if r_ax.size not in (1, target.size):
+            raise ValueError(
+                f"repeat: `repeats` has size {r_ax.size} but axis {target.label!r} has size {target.size}"
+            )
+        if r_ax.name is not None and target.name is not None and r_ax.name != target.name:
+            raise ValueError(f"repeat: `repeats` axis {r_ax.name!r} does not match the repeated axis {target.name!r}")
+    if not (jnp.issubdtype(repeats.dtype, jnp.integer) or repeats.dtype == jnp.bool_):
+        raise TypeError(f"repeat: `repeats` must have an integer dtype, got {repeats.dtype}")
+
+    # The output size must be static because it becomes an `Axis`.
+    if total_repeat_length is not None:
+        out_size = total_repeat_length
+    else:
+        try:
+            counts = repeats.array
+        except jax.errors.TracerArrayConversionError as err:
+            raise ValueError(
+                "repeat: the output size depends on traced values of `repeats`; pass `total_repeat_length`"
+            ) from err
+        if any(counts < 0):
+            raise ValueError("repeat: `repeats` must be non-negative")
+        out_size = int(counts.sum() * (target.size if counts.size == 1 else 1))
+
+    if out_size == 0:
+        raise ValueError("repeat: the result would have a zero-size axis, which `Axis` does not support")
+
+    out_axes = tuple(ax.resize(out_size) if i == idx else ax for i, ax in enumerate(named.axes))
+    jax_sharding = canonicalize_sharding(out_axes, out_sharding, "repeat")
+    jax_array = jnp.repeat(
+        named.array,
+        repeats.array,
+        axis=idx,
+        total_repeat_length=total_repeat_length if repeats.ndim else None,
+        out_sharding=jax_sharding,
+    )
+
+    return constructors.array(jax_array, out_axes)
 
 
 # array value operations
@@ -1379,9 +1569,61 @@ def round(a: NamedArrayLike, decimals: int = 0) -> NamedArray:
 
 
 def around(a: NamedArrayLike, decimals: int = 0) -> NamedArray:
-    """Alias of ``round``."""
+    """Alias of ``round``.
+
+    Args:
+        a: Input array or scalar.
+        decimals: Number of decimal points to which the input is rounded.
+
+    Returns:
+        A ``NamedArray`` containing the rounded values.
+    """
 
     return round(a, decimals)
+
+
+def nan_to_num(
+    x: NamedArrayLike, nan: NamedArrayLike, posinf: NamedArrayLike | None = None, neginf: NamedArrayLike | None = None
+) -> NamedArray:
+    """Replace NaN and infinite entries in an array.
+
+    Args:
+        x: The input array.
+        nan: Value used to replace NaN entries.
+        posinf: Value used to replace positive infinity entries, if specified.
+        neginf: Value used to replace negative infinity entries, if specified.
+
+    Returns:
+        A ``NamedArray`` with NaN and infinite entries replaced.
+    """
+    inputs = [x, nan]
+    if posinf is not None:
+        inputs.append(posinf)
+    if neginf is not None:
+        inputs.append(neginf)
+
+    arrays, axes = broadcast_arrays_and_shape(*inputs)
+
+    x_array, nan_array = arrays[:2]
+    cursor = 2
+
+    posinf_array = None
+    if posinf is not None:
+        posinf_array = arrays[cursor].array
+        cursor += 1
+
+    neginf_array = None
+    if neginf is not None:
+        neginf_array = arrays[cursor].array
+
+    result = jnp.nan_to_num(
+        x_array.array,
+        nan=nan_array.array,
+        posinf=posinf_array,
+        neginf=neginf_array,
+    )
+
+    return constructors.array(result, axes)
 
 
 def compress(
@@ -1485,6 +1727,50 @@ def extract(
     return constructors.array(jax_array, out_axes)
 
 
+def select(
+    condlist: Sequence[NamedArrayLike],
+    choicelist: Sequence[NamedArrayLike],
+    default: NamedArrayLike = 0,
+) -> NamedArray:
+    """Select values from choices according to a list of conditions.
+
+    Args:
+        condlist: Boolean arrays specifying which values to select.
+        choicelist: Arrays supplying values for the corresponding conditions.
+        default: Value used where no condition is true.
+
+    Returns:
+        A ``NamedArray`` of values selected from ``choicelist`` and ``default``,
+        broadcast to a common shape.
+
+    Raises:
+        ValueError: If no conditions are provided or the condition and choice
+            lists have different lengths.
+    """
+    condlist = tuple(condlist)
+    choicelist = tuple(choicelist)
+
+    if not condlist:
+        raise ValueError("select requires at least one condition")
+    if len(condlist) != len(choicelist):
+        raise ValueError(f"select: got {len(condlist)} conditions and {len(choicelist)} choices")
+
+    arrays, axes = broadcast_arrays_and_shape(*condlist, *choicelist, default)
+
+    n = len(condlist)
+    conditions = arrays[:n]
+    choices = arrays[n:-1]
+    default = arrays[-1]
+
+    result = jnp.select(
+        [condition.array for condition in conditions],
+        [choice.array for choice in choices],
+        default=default.array,
+    )
+
+    return constructors.array(result, axes)
+
+
 @overload
 def where(condition: NamedArrayLike, x: NamedArrayLike, y: NamedArrayLike, /) -> NamedArray: ...
 
@@ -1562,6 +1848,7 @@ def where(
 
 
 def _where_indices(condition: NamedArrayLike, size: int | Axis | None, fill_value: Any) -> tuple[NamedArray, ...]:
+    """Return index arrays for the true positions of a boolean condition."""
     cond = util.ensure_named("where", condition)
     if cond.ndim == 0:
         raise ValueError("where: the one-argument form is not defined for zero-dimensional conditions")
@@ -1598,99 +1885,6 @@ def angle(a: NamedArrayLike, deg: bool = False) -> NamedArray:
 
     a = util.ensure_named("angle", a)
     return eqx.tree_at(lambda x: x.array, a, replace_fn=lambda x: jnp.angle(x, deg))
-
-
-def gcd(a1: NamedArrayLike, a2: NamedArrayLike):
-    """Compute the element-wise greatest common divisor of two arrays.
-
-    Args:
-        a1: The first input array.
-        a2: The second input array.
-
-    Returns:
-        A ``NamedArray`` containing the element-wise GCD of ``a1`` and ``a2``.
-    """
-    (a1, a2), out_axes = broadcast_arrays_and_shape(a1, a2)
-
-    jax_array = jnp.gcd(a1.array, a2.array)
-    return constructors.array(jax_array, out_axes)
-
-
-def lcm(a1: NamedArrayLike, a2: NamedArrayLike):
-    """Compute the element-wise least common multiple of two arrays.
-
-    Args:
-        a1: The first input array.
-        a2: The second input array.
-
-    Returns:
-        A ``NamedArray`` containing the element-wise LCM of ``a1`` and ``a2``.
-    """
-    (a1, a2), out_axes = broadcast_arrays_and_shape(a1, a2)
-
-    jax_array = jnp.lcm(a1.array, a2.array)
-    return constructors.array(jax_array, out_axes)
-
-
-def meshgrid(
-    *xi: NamedArrayLike, sparse: bool = False, indexing: Literal["xy", "ij"] = "xy"
-) -> tuple[NamedArray, ...]:
-    """Return coordinate arrays over the grid spanned by one-dimensional coordinate vectors.
-
-    Like `jax.numpy.meshgrid`, but every input carries its own `Axis`, so the grid axes are the inputs' axes and
-    no extra bookkeeping is needed to say which output dimension belongs to which coordinate.
-
-    Args:
-        *xi: One-dimensional ``NamedArray``s of coordinates. Their axes must be distinct (both by value and by name).
-        sparse: If ``True``, return the inputs unchanged. Broadcasting by axis name already makes them behave like the
-            sparse grid of NumPy, so no size-1 axes are needed.
-        indexing: ``"xy"`` (the ``jax.numpy`` default) puts the second input's axis first and the first input's axis
-            second in the output, with the remaining axes in input order. ``"ij"`` keeps input order. This only
-            changes the memory layout of the outputs, not which axis carries which coordinate.
-
-    Returns:
-        A tuple of ``len(xi)`` arrays, one per input, each broadcast over the axes of all inputs (or the inputs
-        themselves if ``sparse``).
-
-    Raises:
-        ValueError: If an input is not one-dimensional, if two inputs share an axis, or if ``indexing`` is invalid.
-    """
-    xi = util.ensure_named_tuple("meshgrid", xi)
-    if indexing not in ("xy", "ij"):
-        raise ValueError(f"meshgrid: `indexing` must be 'xy' or 'ij', got {indexing!r}")
-    for pos, x in enumerate(xi):
-        if x.ndim != 1:
-            raise ValueError(f"meshgrid: inputs must be one-dimensional, got shape {x.shape} at position {pos}")
-
-    axes = tuple(x.axes[0] for x in xi)
-    if len(set(axes)) != len(axes):
-        raise ValueError(f"meshgrid: inputs must have distinct axes, got {axes}")
-    check_unique_axis_names(axes)
-
-    if sparse:
-        return xi
-
-    grids = jnp.meshgrid(*(x.array for x in xi), indexing=indexing)
-    if indexing == "xy" and len(axes) > 1:
-        axes = (axes[1], axes[0], *axes[2:])
-    return tuple(constructors.array(g, axes) for g in grids)
-
-
-# sorting
-
-
-def sort_complex(a: NamedArrayLike) -> NamedArray:
-    """Sort a complex array using the real part first, then the imaginary part.
-
-    Args:
-        a: The input array.
-
-    Returns:
-        A `NamedArray` with elements sorted along the last axis.
-    """
-
-    a = util.ensure_named("sort_complex", a)
-    return eqx.tree_at(lambda x: x.array, a, replace_fn=lambda x: jnp.sort_complex(x))
 
 
 def top_k(
@@ -1799,6 +1993,19 @@ def hanning(M: Axis) -> NamedArray:
     return constructors.array(jnp.hanning(M.size), M)
 
 
+def hamming(M: Axis) -> NamedArray:
+    """Return a Hamming window of size M.
+
+    Args:
+        M: The axis of the window.
+
+    Returns:
+        An array of size M containing the Hamming window.
+    """
+
+    return constructors.array(jnp.hamming(M.size), M)
+
+
 def kaiser(M: Axis, beta: NamedArrayLike) -> NamedArray:
     """Return the Kaiser window of length ``M.size`` on axis ``M``.
 
@@ -1811,3 +2018,409 @@ def kaiser(M: Axis, beta: NamedArrayLike) -> NamedArray:
     """
     beta = util.ensure_named("kaiser", beta)
     return constructors.array(jnp.kaiser(M.size, beta.array), M)
+
+
+def copy(a: NamedArrayLike, order: str = "K") -> NamedArray:
+    """Return a copy of an array.
+
+    Args:
+        a: The array to copy.
+        order: Memory layout order for the copy, as in ``jax.numpy.copy``.
+
+    Returns:
+        A copy of ``a`` with the same axes.
+    """
+    a = util.ensure_named("copy", a)
+    return constructors.array(jnp.copy(a.array, order=order), a.axes)
+
+
+def append(
+    arr: NamedArrayLike,
+    values: NamedArrayLike,
+    axis: AxisSelector | None = None,
+) -> NamedArray:
+    """Append values to an array.
+
+    When ``axis`` is None, both inputs are flattened first.
+
+    Args:
+        arr: The array to append to.
+        values: The values to append.
+        axis: The axis along which to append. If ``None``, both inputs are
+            flattened first.
+
+    Returns:
+        A ``NamedArray`` containing ``arr`` followed by ``values``.
+
+    Raises:
+        ValueError: If the arrays cannot be concatenated along ``axis``.
+    """
+    if axis is None:
+        return concatenate((ravel(arr), ravel(values)), axis=0)
+    return concatenate((arr, values), axis=axis)
+
+
+def expand_dims(
+    a: NamedArrayLike,
+    axis: AxisLike,
+    *,
+    index: int = 0,
+) -> NamedArray:
+    """Insert a new singleton axis.
+
+    ``axis`` describes the new axis, while ``index`` determines its position.
+
+    Args:
+        a: The input array.
+        axis: The new singleton axis.
+        index: Position at which to insert the axis.
+
+    Returns:
+        A ``NamedArray`` with the new singleton axis inserted.
+
+    Raises:
+        TypeError: If ``index`` is not an integer.
+        ValueError: If the new axis name already exists or ``index`` is out of
+            range.
+    """
+    named = util.ensure_named("expand_dims", a)
+    new_axis = util.resolve_new_axis(axis, 1, "expand_dims", "axis")
+
+    if new_axis.name is not None and new_axis.name in axis_names(named.axes):
+        raise ValueError(f"expand_dims: axis name {new_axis.name!r} already exists")
+
+    position = _normalize_insert_index(index, named.ndim, "expand_dims")
+    array = jnp.expand_dims(named.array, axis=position)
+    axes = named.axes[:position] + (new_axis,) + named.axes[position:]
+
+    return constructors.array(array, axes)
+
+
+def squeeze(
+    a: NamedArrayLike,
+    axis: AxisSelection | None = None,
+) -> NamedArray:
+    """Remove singleton axes.
+
+    If ``axis`` is specified, every selected axis must have size one.
+
+    Args:
+        a: The input array.
+        axis: The singleton axis or axes to remove. If ``None``, all singleton
+            axes are removed.
+
+    Returns:
+        A ``NamedArray`` with the selected axes removed.
+
+    Raises:
+        ValueError: If any selected axis does not have size one.
+    """
+    named = util.ensure_named("squeeze", a)
+
+    if axis is None:
+        indices = tuple(i for i, ax in enumerate(named.axes) if ax.size == 1)
+    else:
+        indices = axis_indices(named.axes, axis)
+
+        for i in indices:
+            if named.axes[i].size != 1:
+                raise ValueError(f"squeeze: axis {named.axes[i].label!r} has size {named.axes[i].size}, expected 1")
+
+    filtered_axes = remove_axes(named.axes, indices)
+    jax_squeeze = jnp.squeeze(named.array, axis=indices if axis is not None else None)
+
+    return constructors.array(jax_squeeze, filtered_axes)
+
+
+def flip(
+    m: NamedArrayLike,
+    axis: AxisSelection | None = None,
+) -> NamedArray:
+    """Reverse the order of elements along selected axes.
+
+    Args:
+        m: The input array.
+        axis: The axis or axes to reverse. If ``None``, all axes are reversed.
+
+    Returns:
+        A ``NamedArray`` with the selected axes reversed.
+    """
+    named = util.ensure_named("flip", m)
+    indices = None if axis is None else axis_indices(named.axes, axis)
+
+    return constructors.array(jnp.flip(named.array, axis=indices), named.axes)
+
+
+def moveaxis(
+    a: NamedArrayLike,
+    source: AxisSelection,
+    destination: int | Sequence[int],
+) -> NamedArray:
+    """Move selected axes to new positions.
+
+    Sources are resolved as named-axis selectors. Destinations are positional
+    indices, following NumPy's convention.
+
+    Args:
+        a: The input array.
+        source: The axis or axes to move.
+        destination: The positional destination or destinations for the source
+            axes.
+
+    Returns:
+        A ``NamedArray`` with the selected axes moved.
+
+    Raises:
+        TypeError: If a destination is not an integer.
+        ValueError: If source and destination counts differ, an axis or
+            destination is repeated, or a destination is out of range.
+    """
+    named = util.ensure_named("moveaxis", a)
+
+    sources = axis_indices(named.axes, source)
+    destinations = (destination,) if isinstance(destination, int) else tuple(destination)
+
+    if len(sources) != len(destinations):
+        raise ValueError(f"moveaxis: got {len(sources)} source axes and {len(destinations)} destination positions")
+
+    if len(set(sources)) != len(sources):
+        raise ValueError("moveaxis: source axes must be distinct")
+
+    ndim = named.ndim
+    normalized = []
+
+    for destination in destinations:
+        if isinstance(destination, bool) or not isinstance(destination, int):
+            raise TypeError("moveaxis: destinations must be integers")
+        if not -ndim <= destination < ndim:
+            raise ValueError(f"moveaxis: destination {destination} is out of range for {ndim} axes")
+        normalized.append(destination % ndim)
+
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("moveaxis: destination positions must be distinct")
+
+    order = [i for i in range(ndim) if i not in sources]
+
+    for destination, source in sorted(zip(normalized, sources)):
+        order.insert(destination, source)
+
+    return constructors.array(jnp.transpose(named.array, order), tuple(named.axes[i] for i in order))
+
+
+def _split_named(
+    ary: NamedArrayLike,
+    indices_or_sections: int | Sequence[int],
+    axis: AxisSelector,
+    *,
+    equal: bool,
+) -> list[NamedArray]:
+    """Shared implementation for split and array_split."""
+    named = util.ensure_named("array_split" if not equal else "split", ary)
+
+    idx = axis_index(named.axes, axis)
+    if idx is None:
+        raise ValueError(f"split: axis {axis!r} not found in {named.axes}")
+
+    if isinstance(indices_or_sections, bool):
+        raise TypeError("split: indices_or_sections must not be bool")
+
+    fn = jnp.split if equal else jnp.array_split
+    parts = fn(named.array, indices_or_sections, axis=idx)
+
+    result = []
+    for part in parts:
+        size = part.shape[idx]
+        if size == 0:
+            raise ValueError("split: zero-sized axes are not supported")
+
+        axes = named.axes[:idx] + (named.axes[idx].resize(size),) + named.axes[idx + 1 :]
+        result.append(constructors.array(part, axes))
+
+    return result
+
+
+def split(
+    ary: NamedArrayLike,
+    indices_or_sections: int | Sequence[int],
+    axis: AxisSelector = 0,
+) -> list[NamedArray]:
+    """Split an array into equally sized or explicitly indexed sections.
+
+    Args:
+        ary: The array to split.
+        indices_or_sections: Number of equal sections or split indices.
+        axis: The axis along which to split.
+
+    Returns:
+        A list of ``NamedArray`` sections.
+
+    Raises:
+        TypeError: If ``indices_or_sections`` is a boolean.
+        ValueError: If ``axis`` is not present, the split is invalid, or a
+            resulting section would have size zero.
+    """
+    return _split_named(ary, indices_or_sections, axis, equal=True)
+
+
+def array_split(
+    ary: NamedArrayLike,
+    indices_or_sections: int | Sequence[int],
+    axis: AxisSelector = 0,
+) -> list[NamedArray]:
+    """Split an array into sections, allowing unequal section sizes.
+
+    Args:
+        ary: The array to split.
+        indices_or_sections: Number of sections or split indices.
+        axis: The axis along which to split.
+
+    Returns:
+        A list of ``NamedArray`` sections.
+
+    Raises:
+        TypeError: If ``indices_or_sections`` is a boolean.
+        ValueError: If ``axis`` is not present or a resulting section would
+            have size zero.
+    """
+    return _split_named(ary, indices_or_sections, axis, equal=False)
+
+
+def isin(
+    element: NamedArrayLike,
+    test_elements: NamedArrayLike,
+    assume_unique: bool = False,
+    invert: bool = False,
+    *,
+    method: str = "auto",
+) -> NamedArray:
+    """Test whether each element occurs in a collection of values.
+
+    Args:
+        element: Values to test.
+        test_elements: Collection of values to search.
+        assume_unique: If ``True``, assume both inputs contain unique values.
+        invert: If ``True``, return the complement of the membership test.
+        method: Search method, as accepted by ``jax.numpy.isin``.
+
+    Returns:
+        A boolean ``NamedArray`` with the same axes as ``element``.
+    """
+    element, test_elements = util.ensure_named("isin", element, test_elements)
+
+    result = jnp.isin(
+        element.array,
+        test_elements.array,
+        assume_unique=assume_unique,
+        invert=invert,
+        method=method,
+    )
+
+    return constructors.array(result, element.axes)
+
+
+def digitize(
+    x: NamedArrayLike,
+    bins: NamedArrayLike,
+    right: bool = False,
+    *,
+    method: str | None = None,
+) -> NamedArray:
+    """Return the indices of the bins to which values belong.
+
+    Args:
+        x: Values to assign to bins.
+        bins: One-dimensional array of bin boundaries.
+        right: If ``True``, use the right side of each bin for comparisons.
+        method: Optional method for locating bins, as accepted by
+            ``jax.numpy.digitize``.
+
+    Returns:
+        An integer ``NamedArray`` with the same axes as ``x``.
+
+    Raises:
+        ValueError: If ``bins`` is not one-dimensional.
+    """
+    x, bins = util.ensure_named("digitize", x, bins)
+
+    if bins.ndim != 1:
+        raise ValueError("digitize: `bins` must be one-dimensional")
+
+    result = jnp.digitize(x.array, bins.array, right=right, method=method)
+    return constructors.array(result, x.axes)
+
+
+def packbits(
+    a: NamedArrayLike,
+    axis: AxisSelector | None = None,
+    bitorder: str = "big",
+) -> NamedArray:
+    """Pack binary-valued elements into uint8 values.
+
+    Args:
+        a: The input array.
+        axis: Axis along which to pack bits. If ``None``, the input is flattened.
+        bitorder: Bit order within each output byte, either ``"big"`` or
+            ``"little"``.
+
+    Returns:
+        A ``NamedArray`` of packed ``uint8`` values.
+
+    Raises:
+        ValueError: If ``axis`` is not present in ``a``.
+    """
+    named = util.ensure_named("packbits", a)
+
+    if axis is None:
+        result = jnp.packbits(named.array, axis=None, bitorder=bitorder)
+        return constructors.array(result, (Axis(result.size),))
+
+    idx = axis_index(named.axes, axis)
+    if idx is None:
+        raise ValueError(f"packbits: axis {axis!r} not found in {named.axes}")
+
+    result = jnp.packbits(named.array, axis=idx, bitorder=bitorder)
+    axes = named.axes[:idx] + (named.axes[idx].resize(result.shape[idx]),) + named.axes[idx + 1 :]
+    return constructors.array(result, axes)
+
+
+def unpackbits(
+    a: NamedArrayLike,
+    axis: AxisSelector | None = None,
+    count: int | None = None,
+    bitorder: str = "big",
+) -> NamedArray:
+    """Unpack elements of a uint8 array into binary-valued elements.
+
+    Args:
+        a: The input array of bytes.
+        axis: Axis along which to unpack bits. If ``None``, the input is
+            flattened.
+        count: Number of bits to unpack along ``axis``.
+        bitorder: Bit order within each input byte, either ``"big"`` or
+            ``"little"``.
+
+    Returns:
+        A ``NamedArray`` of unpacked binary-valued elements.
+
+    Raises:
+        ValueError: If ``axis`` is not present in ``a`` or unpacking would
+            produce a zero-sized axis.
+    """
+    named = util.ensure_named("unpackbits", a)
+
+    if axis is None:
+        result = jnp.unpackbits(named.array, axis=None, count=count, bitorder=bitorder)
+        if result.size == 0:
+            raise ValueError("unpackbits: zero-sized axes are not supported")
+        return constructors.array(result, (Axis(result.size),))
+
+    idx = axis_index(named.axes, axis)
+    if idx is None:
+        raise ValueError(f"unpackbits: axis {axis!r} not found in {named.axes}")
+
+    result = jnp.unpackbits(named.array, axis=idx, count=count, bitorder=bitorder)
+    if result.shape[idx] == 0:
+        raise ValueError("unpackbits: zero-sized axes are not supported")
+
+    axes = named.axes[:idx] + (named.axes[idx].resize(result.shape[idx]),) + named.axes[idx + 1 :]
+    return constructors.array(result, axes)
