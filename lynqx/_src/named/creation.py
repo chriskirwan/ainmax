@@ -1,12 +1,20 @@
+from typing import Literal, overload
+
 import jax.lax
 import jax.numpy as jnp
 from jax.typing import DTypeLike
 
-from lynqx._src.axis_util import axis_index, axis_shape_to_tuple, axis_sizes, validate_unique_axes
+from lynqx._src.axis_util import (
+    axis_index,
+    axis_shape_to_tuple,
+    axis_sizes,
+    check_unique_axis_names,
+)
 from lynqx._src.named import constructors, util
 from lynqx._src.sharding import canonicalize_sharding
 from lynqx._src.typing import (
     Axis,
+    AxisLike,
     AxisSelector,
     AxisShape,
     DuckTypedNamedArray,
@@ -77,7 +85,6 @@ def empty(
     return full(shape, 0.0, dtype, out_sharding=out_sharding)
 
 
-@validate_unique_axes(arg_names=("shape",))
 def full(
     shape: AxisShape,
     fill_value: NamedArrayLike,
@@ -291,3 +298,95 @@ def arange(
         raise ValueError("`arange` does not support complex start/step")
 
     return iota(axis, dtype=dtype, out_sharding=out_sharding) * step + start
+
+
+def meshgrid(
+    *xi: NamedArrayLike, sparse: bool = False, indexing: Literal["xy", "ij"] = "xy"
+) -> tuple[NamedArray, ...]:
+    """Return coordinate arrays over the grid spanned by one-dimensional coordinate vectors.
+
+    Like `jax.numpy.meshgrid`, but every input carries its own `Axis`, so the grid axes are the inputs' axes and
+    no extra bookkeeping is needed to say which output dimension belongs to which coordinate.
+
+    Args:
+        *xi: One-dimensional ``NamedArray``s of coordinates. Their axes must be distinct (both by value and by name).
+        sparse: If ``True``, return the inputs unchanged. Broadcasting by axis name already makes them behave like the
+            sparse grid of NumPy, so no size-1 axes are needed.
+        indexing: ``"xy"`` (the ``jax.numpy`` default) puts the second input's axis first and the first input's axis
+            second in the output, with the remaining axes in input order. ``"ij"`` keeps input order. This only
+            changes the memory layout of the outputs, not which axis carries which coordinate.
+
+    Returns:
+        A tuple of ``len(xi)`` arrays, one per input, each broadcast over the axes of all inputs (or the inputs
+        themselves if ``sparse``).
+
+    Raises:
+        ValueError: If an input is not one-dimensional, if two inputs share an axis, or if ``indexing`` is invalid.
+    """
+    xi = util.ensure_named_tuple("meshgrid", xi)
+    if indexing not in ("xy", "ij"):
+        raise ValueError(f"meshgrid: `indexing` must be 'xy' or 'ij', got {indexing!r}")
+    for pos, x in enumerate(xi):
+        if x.ndim != 1:
+            raise ValueError(f"meshgrid: inputs must be one-dimensional, got shape {x.shape} at position {pos}")
+
+    axes = tuple(x.axes[0] for x in xi)
+    if len(set(axes)) != len(axes):
+        raise ValueError(f"meshgrid: inputs must have distinct axes, got {axes}")
+    check_unique_axis_names(axes)
+
+    if sparse:
+        return xi
+
+    grids = jnp.meshgrid(*(x.array for x in xi), indexing=indexing)
+    if indexing == "xy" and len(axes) > 1:
+        axes = (axes[1], axes[0], *axes[2:])
+    return tuple(constructors.array(g, axes) for g in grids)
+
+
+@overload
+def indices(
+    dimensions: AxisShape, axis: AxisLike | None = None, dtype: DTypeLike | None = None, sparse: Literal[False] = False
+) -> NamedArray: ...
+
+
+@overload
+def indices(
+    dimensions: AxisShape, axis: AxisLike | None = None, dtype: DTypeLike | None = None, sparse: Literal[True] = True
+) -> tuple[NamedArray, ...]: ...
+
+
+@overload
+def indices(
+    dimensions: AxisShape, axis: AxisLike | None = None, dtype: DTypeLike | None = None, sparse: bool = False
+) -> NamedArray | tuple[NamedArray, ...]: ...
+
+
+def indices(
+    dimensions: AxisShape, axis: AxisLike | None = None, dtype: DTypeLike | None = None, sparse: bool = False
+) -> NamedArray | tuple[NamedArray, ...]:
+    """Generate arrays of grid indices.
+
+    Args:
+        dimensions: The shape of the grid.
+        axis: Optionally specify the axis to stack the generated index arrays. Raises when specified if
+            ``sparse = True``.
+        dtype: The dtype of the indices; Defaults to ``integer``
+        sparse: If ``True``, then return sparse indices, otherwise returns dense indices. Default is ``False``.
+
+    Returns:
+        A ``NamedArray`` of shape ``(axis, *dimensions)`` if ``sparse`` is ``False``, or a sequence of rank-1 arrays
+        of the same length as ``dimensions`` if ``sparse`` is ``True``.
+    """
+
+    dim_axes = axis_shape_to_tuple(dimensions)
+    dim_tuple = axis_sizes(dim_axes)
+
+    dim_axis = util.resolve_new_axis(axis, len(dim_tuple), "indices", "axis")
+
+    jax_indices = jnp.indices(dim_tuple, dtype, sparse=sparse)
+
+    out_axes = (dim_axis,) + dim_axes
+    if sparse:
+        return tuple(constructors.array(idx, ax) for idx, ax in zip(jax_indices, dim_tuple))
+    return constructors.array(jax_indices, out_axes)

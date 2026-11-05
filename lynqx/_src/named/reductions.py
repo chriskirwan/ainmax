@@ -942,6 +942,8 @@ def sort(
     array: NamedArrayLike,
     axis: AxisSelection | None = None,
     *,
+    stable: bool = True,
+    descending: bool = False,
     kind: str | None = None,
     order: str | None = None,
 ) -> NamedArray:
@@ -956,7 +958,9 @@ def sort(
     Returns:
         A ``NamedArray`` containing the sorted values.
     """
-    return wrap_axiswise_call(jnp.sort, single_axis_only=True)(array, axis, kind=kind, order=order)
+    return wrap_axiswise_call(jnp.sort, single_axis_only=True)(
+        array, axis, stable=stable, descending=descending, kind=kind, order=order
+    )
 
 
 def argsort(

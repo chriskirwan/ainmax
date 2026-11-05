@@ -50,10 +50,16 @@ def _slice_output_size(s: slice, axis: Axis, fn_name: str) -> int:
 
 
 def _expand_positional_key(
-    key: tuple[AxisIndex | Array | EllipsisType, ...], ndim: int, fn_name: str
-) -> tuple[AxisIndex | Array, ...]:
+    key: tuple[AxisIndex | Array | EllipsisType | None, ...], ndim: int, fn_name: str
+) -> tuple[AxisIndex | Array | None, ...]:
+    """Expand a positional key to one entry per axis, plus one ``None`` per inserted axis.
+
+    ``None`` (``np.newaxis``) does not consume an axis, so it is excluded from the "too many indices" count and from
+    the number of axes an ``Ellipsis`` / implicit trailing ``slice(None)`` has to fill.
+    """
     ellipsis_pos: int | None = None
-    concrete: list[AxisIndex | Array] = []
+    concrete: list[AxisIndex | Array | None] = []
+    n_consuming = 0
     for i, k in enumerate(key):
         if k is Ellipsis:
             if ellipsis_pos is not None:
@@ -61,15 +67,17 @@ def _expand_positional_key(
             ellipsis_pos = i
         else:
             concrete.append(k)
+            if k is not None:
+                n_consuming += 1
 
-    if len(concrete) > ndim:
-        raise IndexError(f"{fn_name}: too many indices ({len(concrete)}) for {ndim} axes.")
+    if n_consuming > ndim:
+        raise IndexError(f"{fn_name}: too many indices ({n_consuming}) for {ndim} axes.")
 
+    fill = (slice(None),) * (ndim - n_consuming)
     if ellipsis_pos is None:
-        return tuple(concrete) + (slice(None),) * (ndim - len(concrete))
+        return tuple(concrete) + fill
 
-    fill = ndim - len(concrete)
-    return tuple(concrete[:ellipsis_pos]) + (slice(None),) * fill + tuple(concrete[ellipsis_pos:])
+    return tuple(concrete[:ellipsis_pos]) + fill + tuple(concrete[ellipsis_pos:])
 
 
 def _check_axis_names_agree(
@@ -93,49 +101,76 @@ def _arange_axis(axis: Axis) -> NamedArray:
     return constructors.array(jnp.arange(axis.size), (axis,))
 
 
+def _key_axis_positions(per_key: list[AxisIndex | None]) -> list[int | None]:
+    """For each key entry, the position of the axis it indexes (``None`` for an inserted axis)."""
+    positions: list[int | None] = []
+    next_axis = 0
+    for v in per_key:
+        if v is None:
+            positions.append(None)
+        else:
+            positions.append(next_axis)
+            next_axis += 1
+    return positions
+
+
 def _advanced_output_axes(
     axes: tuple[Axis, ...],
-    per_axis: list[AxisIndex],
-    kept_mask: list[bool],
+    per_key: list[AxisIndex | None],
     broadcast_axes: tuple[Axis, ...],
     fn_name: str,
 ) -> tuple[Axis, ...]:
+    """Output axes when the key contains at least one advanced (array) index.
 
-    def resized(i: int) -> Axis:
-        index = per_axis[i]
+    Follows NumPy: ints count as advanced indices alongside arrays, and a ``slice`` *or* a ``None`` between two
+    advanced entries makes them non-adjacent, in which case the broadcast axes go first.
+    """
+    axis_pos = _key_axis_positions(per_key)
+
+    def surviving(k: int) -> Axis:
+        index = per_key[k]
+        if index is None:
+            return Axis(1)
         if not isinstance(index, slice):
             raise TypeError(f"{fn_name}: expected a slice for retained axis, got {index}.")
-        return axes[i].resize(_slice_output_size(index, axes[i], fn_name))
+        position = cast(int, axis_pos[k])
+        return axes[position].resize(_slice_output_size(index, axes[position], fn_name))
 
-    consumed = [i for i, k in enumerate(kept_mask) if not k]
-    first, last = consumed[0], consumed[-1]
-    is_contiguous = (last - first + 1) == len(consumed)
+    advanced = [k for k, v in enumerate(per_key) if v is not None and not isinstance(v, slice)]
+    first, last = advanced[0], advanced[-1]
+    is_contiguous = (last - first + 1) == len(advanced)
 
     if is_contiguous:
-        before = tuple(resized(i) for i in range(first) if kept_mask[i])
-        after = tuple(resized(i) for i in range(last + 1, len(axes)) if kept_mask[i])
+        before = tuple(surviving(k) for k in range(first))
+        after = tuple(surviving(k) for k in range(last + 1, len(per_key)))
         return before + broadcast_axes + after
     else:
-        kept = tuple(resized(i) for i in range(len(axes)) if kept_mask[i])
+        kept = tuple(surviving(k) for k in range(len(per_key)) if k not in set(advanced))
         return broadcast_axes + kept
 
 
 def _resolve_advanced_index(
-    axes: tuple[Axis, ...], per_axis: list[AxisIndex], fn_name: str
-) -> tuple[tuple[AxisIndex | Array, ...], tuple[Axis, ...]]:
-    kept_mask = [isinstance(v, slice) for v in per_axis]
-    advanced_names = {ax.name for v in per_axis if isinstance(v, NamedArray) for ax in v.axes if ax.name is not None}
+    axes: tuple[Axis, ...], per_key: list[AxisIndex | None], fn_name: str
+) -> tuple[tuple[AxisIndex | Array | None, ...], tuple[Axis, ...]]:
+    axis_pos = _key_axis_positions(per_key)
+    advanced_names = {ax.name for v in per_key if isinstance(v, NamedArray) for ax in v.axes if ax.name is not None}
     if advanced_names:
-        for i, axis in enumerate(axes):
-            if kept_mask[i] and per_axis[i] == slice(None) and axis.name in advanced_names:
-                per_axis[i] = _arange_axis(axis)
-                kept_mask[i] = False
+        for k, v in enumerate(per_key):
+            position = axis_pos[k]
+            if position is None or not isinstance(v, slice) or v != slice(None):
+                continue
+            if axes[position].name in advanced_names:
+                per_key[k] = _arange_axis(axes[position])
 
-    advanced_entries = [v for v in per_axis if isinstance(v, NamedArray)]
+    advanced_entries = [v for v in per_key if isinstance(v, NamedArray)]
     broadcasted = operations.broadcast_arrays(*advanced_entries)
     broadcast_axes = broadcasted[0].axes if broadcasted else ()
 
-    kept_names = {axes[i].name for i, k in enumerate(kept_mask) if k and axes[i].name is not None}
+    kept_names = {
+        axes[position].name
+        for k, v in enumerate(per_key)
+        if isinstance(v, slice) and (position := axis_pos[k]) is not None and axes[position].name is not None
+    }
     collision = kept_names & {ax.name for ax in broadcast_axes if ax.name is not None}
     if collision:
         raise ValueError(
@@ -144,25 +179,26 @@ def _resolve_advanced_index(
         )
 
     adv_iter = iter(broadcasted)
-    positional: tuple[AxisIndex | Array, ...] = tuple(
-        next(adv_iter).array if isinstance(v, NamedArray) else v for v in per_axis
+    positional: tuple[AxisIndex | Array | None, ...] = tuple(
+        next(adv_iter).array if isinstance(v, NamedArray) else v for v in per_key
     )
 
-    output_axes = _advanced_output_axes(axes, per_axis, kept_mask, broadcast_axes, fn_name)
+    output_axes = _advanced_output_axes(axes, per_key, broadcast_axes, fn_name)
     check_unique_axis_names(output_axes)
     return positional, output_axes
 
 
 def resolve_index(
     axes: tuple[Axis, ...], slices: NamedIndex, *, fn_name: str
-) -> tuple[tuple[AxisIndex | Array, ...], tuple[Axis, ...]]:
+) -> tuple[tuple[AxisIndex | Array | None, ...], tuple[Axis, ...]]:
     """Resolve a user-supplied index against a tuple of named axes.
 
     This is the single place index resolution happens for both ``NamedArray.__getitem__`` and ``NamedArray.at[]``.
     Two index forms are accepted: a mapping from axis selectors (names or positional indices) to per-axis indexers,
-    or a positional tuple (optionally containing a single ``...``) mirroring NumPy's indexing syntax. The function
-    returns both the positional key that can be handed straight to the underlying JAX array and the axes that the
-    *result* of that indexing carries.
+    or a positional tuple (optionally containing a single ``...`` and any number of ``None``) mirroring NumPy's
+    indexing syntax. ``None`` (``np.newaxis``) inserts an anonymous ``Axis(1)`` at that position; it is only valid in
+    the positional form. The function returns both the positional key that can be handed straight to the underlying
+    JAX array and the axes that the *result* of that indexing carries.
 
     Args:
         axes: The axes of the array being indexed.
@@ -172,10 +208,13 @@ def resolve_index(
 
     Returns:
         A tuple ``(positional, output_axes)``.
-            - ``positional`` is a plain tuple of ``int``/``slice``/``Array`` values, one per axis of ``axes``, ready
-            to pass to the underlying JAX array's ``__getitem__`` / ``.at[]``.
-            - ``output_axes`` names the result: an axis indexed with an ``int`` is dropped, and an axis indexed with
-                a ``slice`` or ``NamedArray`` is kept with its (statically-known) output size.
+            - ``positional`` is a plain tuple of ``int``/``slice``/``Array``/``None`` values -- one per axis of
+            ``axes``, plus one ``None`` per inserted axis -- ready to pass to the underlying JAX array's
+            ``__getitem__`` / ``.at[]``.
+            - ``output_axes`` names the result: an axis indexed with an ``int`` is dropped, an axis indexed with
+                a ``slice`` or ``NamedArray`` is kept with its (statically-known) output size, and each ``None``
+                contributes an anonymous ``Axis(1)``. As in NumPy, a ``None`` between two advanced indices makes
+                them non-adjacent, so the broadcast axes are moved to the front.
 
     Raises:
         ValueError: If a selector names an axis that does not exist, if two selectors target the same axis, or if a
@@ -186,8 +225,9 @@ def resolve_index(
     """
     ndim = len(axes)
 
+    per_key: list[AxisIndex | None]
     if isinstance(slices, Mapping):
-        per_axis: list[AxisIndex] = [slice(None)] * ndim
+        per_key = [slice(None)] * ndim
         seen: dict[int, AxisSelector] = {}
         for selector, value in slices.items():
             position = _resolve_index(axes, selector, fn_name)
@@ -200,25 +240,30 @@ def resolve_index(
             if not isinstance(value, AxisIndex):
                 raise TypeError(
                     f"{fn_name}: index for axis {axes[position]} must be an int, slice, "
-                    f"or NamedArray -- got {type(value).__name__}. Bare arrays are only "
+                    f"or NamedArray -- got {type(value).__name__}. Bare arrays and `None` (new axis) are only "
                     "accepted in the positional-tuple index form."
                 )
-            per_axis[position] = value
+            per_key[position] = value
     else:
         tup = slices if isinstance(slices, tuple) else (slices,)
         expanded = _expand_positional_key(tup, ndim, fn_name)
-        per_axis = [v if isinstance(v, AxisIndex) else _wrap_bare_array(v) for v in expanded]
+        per_key = [v if v is None or isinstance(v, AxisIndex) else _wrap_bare_array(v) for v in expanded]
 
-    if any(isinstance(v, NamedArray) for v in per_axis):
-        return _resolve_advanced_index(axes, per_axis, fn_name)
+    if any(isinstance(v, NamedArray) for v in per_key):
+        return _resolve_advanced_index(axes, per_key, fn_name)
 
     output_axes: list[Axis] = []
-    for axis, value in zip(axes, per_axis):
+    axis_iter = iter(axes)
+    for value in per_key:
+        if value is None:
+            output_axes.append(Axis(1))  # a new axis consumes no source axis
+            continue
+        axis = next(axis_iter)
         if isinstance(value, slice):
             output_axes.append(axis.resize(_slice_output_size(value, axis, fn_name)))
         # an `int` value consumes the axis -- nothing appended for it
 
-    return tuple(per_axis), tuple(output_axes)
+    return tuple(per_key), tuple(output_axes)
 
 
 def dynamic_slice(
@@ -284,6 +329,17 @@ def dynamic_update_slice(array: NamedArray, update: NamedArrayLike, start: Mappi
     with a traced start. `update`'s own shape (not `start`) determines how much
     of `array` gets overwritten along every axis -- same as `lax`'s own
     primitive -- and axes not named in `start` are written beginning at index 0.
+
+    Args:
+        array: The array to update.
+        update: Values to write into ``array``.
+        start: Mapping from axes of ``array`` to traced start indices.
+
+    Returns:
+        A ``NamedArray`` with ``update`` written into ``array``.
+
+    Raises:
+        ValueError: If ``array`` and ``update`` have incompatible axis names.
     """
     update = util.ensure_named("dynamic_update_slice", update)
     _check_axis_names_agree(array.axes, update.axes, "dynamic_update_slice")
@@ -362,7 +418,7 @@ class NamedIndexUpdateRef:
     """
 
     source: NamedArray
-    positional: tuple[AxisIndex | Array, ...]
+    positional: tuple[AxisIndex | Array | None, ...]
     output_axes: tuple[Axis, ...]
 
     def get(self, *, out_sharding: ShardingLike | None = None, **kwargs) -> NamedArray:
@@ -615,3 +671,7 @@ def take_along_axis(
     new_size = indices.array.shape[position]
     new_axes = array.axes[:position] + (array.axes[position].resize(new_size),) + array.axes[position + 1 :]
     return constructors.array(result, new_axes)
+
+
+index_exp = jnp.index_exp
+s_ = jnp.s_

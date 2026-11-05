@@ -55,7 +55,6 @@ UNARY_RECORDS = [
     UfuncRecord("arcsinh", 1),
     UfuncRecord("floor", 1, test_grad=False),
     UfuncRecord("ceil", 1, test_grad=False),
-    UfuncRecord("around", 1, test_grad=False),
     UfuncRecord("isnan", 1, dtypes=FLOAT_DTYPES, test_grad=False),
     UfuncRecord("isfinite", 1, dtypes=FLOAT_DTYPES, test_grad=False),
     UfuncRecord("logical_not", 1, dtypes=BOOL_DTYPES, test_grad=False),

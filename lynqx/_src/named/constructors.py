@@ -22,15 +22,15 @@ def array(
     """Convert an object into a `NamedArray`
 
     Args:
-        a: an object that is convertiable to a `NamedArray`. This includes JAX arrays, NumPy arrays, Python scalars,
-            Python collections like lists and tuples, objects with a `__jax_array__` method, and objects supporting
+        a: an object that is convertiable to a ``NamedArray``. This includes JAX arrays, NumPy arrays, Python scalars,
+            Python collections like lists and tuples, objects with a ``__jax_array__`` method, and objects supporting
             the Python buffer protocol.
-        shape: the shape of the resulting `NamedArray`. This can be specified as a sequence of `Axis` objects, a
-            single `Axis` object, a sor a mapping from axis names to sizes.
-        dtype: optionally specify the data type of the resulting `NamedArray`. If None, the data type will be inferred
-            from the input object.
-        copy: optional boolean specifying the copy mode. If None, the default behavior of `jax.numpy.asarray` will be
-            used.
+        shape: the shape of the resulting ``NamedArray``. This can be specified as a sequence of ``Axis`` objects, a
+            single ``Axis`` object, a sor a mapping from axis names to sizes.
+        dtype: optionally specify the data type of the resulting ``NamedArray``. If ``None``, the data type will be
+            inferred from the input object.
+        copy: optional boolean specifying the copy mode. If ``None``, the default behavior of ``jax.numpy.asarray``
+            will be used.
         device: optional :class:`~jax.Device` or :class:`~jax.sharding.Sharding` to which the created array will be
             committed.
         out_sharding: optional :class:`~jax.P`, :class:`~lynwx.PM` or :class:`~jax.NamedSharding` specifying the
@@ -56,18 +56,18 @@ def asnamedarray(
     device: Device | NamedSharding | None = None,
     out_sharding: ShardingLike | None = None,
 ) -> NamedArray:
-    """Convert an object into a `NamedArray`. Alias for :func:`lynqx.named.named`.
+    """Convert an object into a ``NamedArray``. Alias for :func:`array`.
 
     Args:
-        a: an object that is convertiable to a `NamedArray`. This includes JAX arrays, NumPy arrays, Python scalars,
-            Python collections like lists and tuples, objects with a `__jax_array__` method, and objects supporting
+        a: an object that is convertiable to a ``NamedArray``. This includes JAX arrays, NumPy arrays, Python scalars,
+            Python collections like lists and tuples, objects with a ``__jax_array__`` method, and objects supporting
             the Python buffer protocol.
-        shape: the shape of the resulting `NamedArray`. This can be specified as a sequence of `Axis` objects, a
-            single `Axis` object, a sor a mapping from axis names to sizes.
-        dtype: optionally specify the data type of the resulting `NamedArray`. If None, the data type will be inferred
-            from the input object.
-        copy: optional boolean specifying the copy mode. If None, the default behavior of `jax.numpy.asarray` will be
-            used.
+        shape: the shape of the resulting ``NamedArray``. This can be specified as a sequence of ``Axis`` objects, a
+            single ``Axis`` object, a sor a mapping from axis names to sizes.
+        dtype: optionally specify the data type of the resulting ``NamedArray``. If ``None``, the data type will be
+            inferred from the input object.
+        copy: optional boolean specifying the copy mode. If ``None``, the default behavior of ``jax.numpy.asarray``
+            will be used.
         device: optional :class:`~jax.Device` or :class:`~jax.sharding.Sharding` to which the created array will be
             committed.
         out_sharding: optional :class:`~jax.P`, :class:`~lynwx.PM` or :class:`~jax.NamedSharding` specifying the
