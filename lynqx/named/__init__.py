@@ -276,7 +276,9 @@ from lynqx._src.named.ufuncs import (
     wrap_elementwise_binary_op as wrap_elementwise_binary_op,
     wrap_elementwise_unary_op as wrap_elementwise_unary_op,
 )
-from lynqx.named import linalg as linalg, random as random
+
+
+# from lynqx.named import linalg as linalg, random as random
 
 
 register_namedarray_methods()
