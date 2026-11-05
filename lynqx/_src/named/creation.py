@@ -369,9 +369,10 @@ def indices(
 
     Args:
         dimensions: The shape of the grid.
-        axis: Optionally specify the axis to stack the generated index arrays.
-        dtype:
-        sparse:
+        axis: Optionally specify the axis to stack the generated index arrays. Raises when specified if
+            ``sparse = True``.
+        dtype: The dtype of the indices; Defaults to ``integer``
+        sparse: If ``True``, then return sparse indices, otherwise returns dense indices. Default is ``False``.
 
     Returns:
         A ``NamedArray`` of shape ``(axis, *dimensions)`` if ``sparse`` is ``False``, or a sequence of rank-1 arrays
