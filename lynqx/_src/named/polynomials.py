@@ -450,3 +450,28 @@ def polyfit(
 
     p = jnp.polyfit(x.array, y_array, deg, rcond, full=False, w=w_array)
     return constructors.array(p, (coef_axis, *k_axes))
+
+
+def vander(x: NamedArrayLike, N: AxisLike, increasing: bool = False):
+    """
+
+    Args:
+        x: Rank-1 input array.
+        N:
+        increasing:
+
+    Returns:
+
+    """
+    x = util.ensure_named("vander", x)
+    if x.ndim != 1:
+        raise ValueError(f"`x` for `vander` must be 1-dimensional, got {x.ndim}")
+
+    if isinstance(N, Axis):
+        degree = N.size
+    else:
+        degree = x.axes[0].size
+        N = Axis(degree, N)
+
+    jax_vander = jnp.vander(x.array, N=degree, increasing=increasing)
+    return constructors.array(jax_vander, N)
