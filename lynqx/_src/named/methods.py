@@ -1,4 +1,5 @@
-import numpy as np
+from collections.abc import Sequence
+
 from jax import Device
 from jax.lax import PrecisionLike
 from jax.typing import DTypeLike
@@ -72,16 +73,16 @@ def _byteswap(self: NamedArray) -> NamedArray:
     return constructors.array(jax_array, self.axes)
 
 
-def _choose(self: NamedArray) -> NamedArray:
-    raise NotImplementedError()
+def _choose(self: NamedArray, choices: Sequence[NamedArrayLike], *, mode: str = "raise") -> NamedArray:
+    return indexing.choose(self, choices, mode=mode)
 
 
-def _clip(self: NamedArray) -> NamedArray:
-    raise NotImplementedError()
+def _clip(self: NamedArray, *, min: NamedArrayLike, max: NamedArrayLike) -> NamedArray:
+    return operations.clip(self, min=min, max=max)
 
 
-def _compress(self: NamedArray) -> NamedArray:
-    raise NotImplementedError()
+def _compress(self: NamedArray, a: NamedArrayLike, axis, *, size, fill_value) -> NamedArray:
+    return operations.compress(self, a, axis, size=size, fill_value=fill_value)
 
 
 def _conj(self: NamedArray) -> NamedArray:
@@ -127,12 +128,12 @@ def _diagonal(
     diagonal: AxisLike | None = None,
     offset: int = 0,
 ) -> NamedArray:
-    raise NotImplementedError()
+    return indexing.diagonal(self, axis1, axis2, diagonal, offset)
 
 
 def _dot(
     self: NamedArray,
-    b: NamedArray,
+    b: NamedArrayLike,
     spec: tensor_contractions.DotContraction,
     *,
     precision: PrecisionLike,
@@ -144,8 +145,8 @@ def _dot(
     )
 
 
-def _flatten(self: NamedArray, *, out_sharding: ShardingLike | None = None) -> NamedArray:
-    raise NotImplementedError()
+def _flatten(self: NamedArray, name: AxisLike | None = None) -> NamedArray:
+    return operations.flatten(self, name=name)
 
 
 def _imag_property(self: NamedArray) -> NamedArray:
@@ -207,6 +208,10 @@ def _ptp(self: NamedArray, axis: AxisSelection | None = None, keepdims: bool = F
     return reductions.ptp(self, axis, keepdims)
 
 
+def _ravel(self, name: AxisLike):
+    return operations.ravel(self, name)
+
+
 def _real_property(self: NamedArray) -> NamedArray:
     return ufuncs.real(self)
 
@@ -218,11 +223,12 @@ def _rename(self: NamedArrayLike, axis: AxisSelector, name: str | None = None) -
 def _repeat(
     self: NamedArray,
     repeats: NamedArrayLike,
+    axis: AxisSelector | None = None,
     *,
     total_repeat_length: int | None = None,
     out_sharding: ShardingLike | None = None,
 ) -> NamedArray:
-    raise NotImplementedError()
+    return operations.repeat(self, repeats, axis, total_repeat_length=total_repeat_length, out_sharding=out_sharding)
 
 
 def _reshape(self: NamedArray, shape: AxisShape, *, out_sharding: ShardingLike | None = None) -> NamedArray:
@@ -241,22 +247,28 @@ def _searchsorted(
     *,
     method: str = "scan",
 ) -> NamedArray:
-    raise NotImplementedError
+    return operations.searchsorted(self, v, side, sorter, method=method)
 
 
 def _sort(
-    self: NamedArray, axis: AxisSelector | None = -1, *, stable: bool = True, descending: bool = False
+    self: NamedArray,
+    axis: AxisSelector | None = -1,
+    *,
+    stable: bool = True,
+    descending: bool = False,
+    kind: str | None = None,
+    order: str | None = None,
 ) -> NamedArray:
-    raise NotImplementedError()
+    return reductions.sort(self, axis, stable=stable, descending=descending, kind=kind, order=order)
 
 
 def _squeeze(self: NamedArray, axis: AxisSelection | None = None) -> NamedArray:
-    raise NotImplementedError()
+    return operations.squeeze(self, axis)
 
 
 def _std(
     self: NamedArray,
-    axis: AxisSelection,
+    axis: AxisSelection | None = None,
     dtype: DTypeLike | None = None,
     ddof: int = 0,
     keepdims: bool = False,
@@ -269,7 +281,7 @@ def _std(
 
 def _sum(
     self: NamedArray,
-    axis: AxisSelection,
+    axis: AxisSelection | None = None,
     dtype: DTypeLike | None = None,
     keepdims: bool = False,
     initial: ScalarLike | None = None,
@@ -280,7 +292,7 @@ def _sum(
 
 
 def _swapaxes(self: NamedArray, axis1: AxisSelector, axis2: AxisSelector) -> NamedArray:
-    raise NotImplementedError()
+    return operations.swapaxes(self, axis1, axis2)
 
 
 def _take(
@@ -308,27 +320,18 @@ def _to_device(self: NamedArray, device: Device | ShardingLike) -> NamedArray:
     return device_put(self, device)
 
 
-def _to_numpy(self: NamedArray) -> np.ndarray:
-    """Convert a NamedArray to a NumPy ndarray.
-
-    Returns:
-        A NumPy ndarray with the same data as the NamedArray.
-    """
-    return np.asarray(self.array)
-
-
 def _trace(
     self: NamedArray, offset: int = 0, axis1: AxisSelector = 0, axis2: AxisSelector = 1, dtype: DTypeLike | None = None
 ) -> NamedArray:
-    return tensor_contractions.trace(self, offset, axis1, axis2, dtype=dtype)
+    return tensor_contractions.trace(self, axis1, axis2, offset, dtype=dtype)
 
 
 def _transpose(self: NamedArray, permutation: AxisSelection | None = None) -> NamedArray:
-    raise NotImplementedError()
+    return operations.transpose(self, permutation)
 
 
-def _transpose_proeprty(self: NamedArray) -> NamedArray:
-    raise NotImplementedError()
+def _transpose_property(self: NamedArray) -> NamedArray:
+    return operations.transpose(self)
 
 
 def _var(
@@ -569,7 +572,7 @@ _jaxarray_methods = {
     "nonzero": _nonzero,
     "prod": _prod,
     "ptp": _ptp,
-    "ravel": _flatten,
+    "ravel": _ravel,
     "repeat": _repeat,
     "reshape": _reshape,
     "round": _round,
@@ -590,10 +593,10 @@ _jaxarray_properties = {
     "at": indexing.NamedIndexUpdateHelper,
     "imag": _imag_property,
     "real": _real_property,
+    "T": _transpose_property,
 }
-_named_methods = {
-    "to_numpy": _to_numpy,
-}
+# _named_methods = {"to_numpy": _to_numpy, "rename": _rename}
+_named_methods = {"rename": _rename}
 _named_properties = {}
 
 

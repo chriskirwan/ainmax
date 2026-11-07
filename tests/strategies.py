@@ -1,5 +1,8 @@
+import jax.numpy as jnp
 from hypothesis import strategies as st
+from hypothesis.extra import numpy as hnp
 from lynqx._src.axis import Axis
+from lynqx._src.named.constructors import array
 
 
 axis_names = st.sampled_from(["x", "y", "z", "batch", "link"])
@@ -57,6 +60,38 @@ def mixed_anonymous_and_duplicate_named_tuples(draw):
     combined = list(anon) + list(dupes)
     draw(st.randoms()).shuffle(combined)
     return tuple(combined)
+
+
+@st.composite
+def named_arrays(draw, *, min_dims=1, max_dims=3, dtype=jnp.float32, min_value=-100.0, max_value=100.0):
+    """A `NamedArray` with unique axis names and finite float entries.
+
+    Subnormals are excluded because XLA on CPU may flush them to zero, which would make exact-equality properties
+    flaky. Values are bounded so that elementwise identities (``round``, ``clip``, ...) are never dominated by overflow
+    or by the loss of precision that comes with huge magnitudes.
+    """
+    axes = draw(disjoint_named_axis_tuples(min_size=min_dims, max_size=max_dims))
+    shape = tuple(ax.size for ax in axes)
+    elements = st.floats(min_value, max_value, width=32, allow_nan=False, allow_infinity=False, allow_subnormal=False)
+    data = draw(hnp.arrays(dtype, shape, elements=elements))
+    return array(jnp.asarray(data), axes)
+
+
+@st.composite
+def named_array_and_axis(draw, **kwargs):
+    """A (non-scalar) `NamedArray` together with one of its axes."""
+    kwargs.setdefault("min_dims", 1)
+    a = draw(named_arrays(**kwargs))
+    return a, draw(st.sampled_from(a.axes))
+
+
+@st.composite
+def named_array_and_axis_pair(draw, **kwargs):
+    """A `NamedArray` with at least two axes, together with two *distinct* axes of it."""
+    kwargs.setdefault("min_dims", 2)
+    a = draw(named_arrays(**kwargs))
+    first, second = draw(st.lists(st.sampled_from(a.axes), min_size=2, max_size=2, unique=True))
+    return a, first, second
 
 
 axes = st.one_of(named_axes(), anonymous_axes())

@@ -296,9 +296,9 @@ def outer(
 
 def trace(
     a: NamedArrayLike,
-    offset: int = 0,
     axis1: AxisSelector = 0,
     axis2: AxisSelector = 1,
+    offset: int = 0,
     dtype: DTypeLike | None = None,
 ) -> NamedArray:
     a = util.ensure_named("trace", a)

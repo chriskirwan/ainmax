@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import EllipsisType
 from typing import cast
@@ -8,10 +8,19 @@ import jax.numpy as jnp
 import numpy as np
 from jax import Array
 
-from lynqx._src.axis_util import axis_index, check_unique_axis_names
+from lynqx._src.axis_util import axis_index, axis_indices, check_unique_axis_names, remove_axes
 from lynqx._src.named import constructors, operations, util
 from lynqx._src.sharding import canonicalize_sharding
-from lynqx._src.typing import Axis, AxisIndex, AxisSelector, NamedArray, NamedArrayLike, NamedIndex, ShardingLike
+from lynqx._src.typing import (
+    Axis,
+    AxisIndex,
+    AxisLike,
+    AxisSelector,
+    NamedArray,
+    NamedArrayLike,
+    NamedIndex,
+    ShardingLike,
+)
 
 
 StaticInt = int | np.integer
@@ -671,6 +680,60 @@ def take_along_axis(
     new_size = indices.array.shape[position]
     new_axes = array.axes[:position] + (array.axes[position].resize(new_size),) + array.axes[position + 1 :]
     return constructors.array(result, new_axes)
+
+
+def choose(a: NamedArrayLike, choices: Sequence[NamedArrayLike], *, mode: str = "raise") -> NamedArray:
+    """Construct an array by picking, element-wise, from a sequence of choice arrays.
+
+    ``result[idx] = choices[a[idx]][idx]`` after broadcasting ``a`` and all ``choices`` to a common shape.
+
+    Args:
+        a: Integer array of indices into ``choices``.
+        choices: The arrays to choose from; they must be broadcast-compatible with ``a`` and each other.
+        mode: How to treat out-of-bounds indices: ``'raise'`` (default; not compatible with JAX transformations),
+            ``'wrap'`` or ``'clip'``.
+
+    Returns:
+        A ``NamedArray`` with the broadcast axes of ``a`` and ``choices``.
+    """
+    choices = tuple(choices)
+    if not choices:
+        raise ValueError("choose requires at least one choice array")
+
+    (a_b, *choices_b), common_axes = operations.broadcast_arrays_and_shape(a, *choices)
+    jax_array = jnp.choose(a_b.array, [c.array for c in choices_b], mode=mode)
+    return constructors.array(jax_array, common_axes)
+
+
+def diagonal(
+    a: NamedArrayLike, axis1: AxisSelector, axis2: AxisSelector, diagonal: AxisLike | None = None, offset: int = 0
+) -> NamedArray:
+    """Extract a diagonal from an array.
+
+    Args:
+        a: The input array.
+        axis1: The first axis forming the diagonal.
+        axis2: The second axis forming the diagonal.
+        diagonal: The new axis for the extracted diagonal. A string creates an
+            unnamed diagonal axis of the appropriate size.
+        offset: Offset of the diagonal from the main diagonal. Defaults to 0.
+
+    Returns:
+        A ``NamedArray`` with the diagonal extracted along a new axis.
+    """
+    a = util.ensure_named("diagonal", a)
+
+    batch_axes = remove_axes(a.axes, (axis1, axis2))
+    idx0, idx1 = axis_indices(a.axes, (axis1, axis2))
+    n0, n1 = a.axes[idx0].size, a.axes[idx1].size
+
+    diag_axis_size = min(n0, n1 - offset) if offset >= 0 else min(n0 + offset, n1)
+    diag_axis = util.resolve_new_axis(diagonal, diag_axis_size, "diagonal", "diagonal")
+
+    out_shape = batch_axes + (diag_axis,)
+    jax_array = jnp.diagonal(a.array, offset, idx0, idx1)
+
+    return constructors.array(jax_array, out_shape)
 
 
 index_exp = jnp.index_exp

@@ -2,20 +2,15 @@ import operator
 
 import jax.numpy as jnp
 import pytest
-from lynqx._src.axis import Axis
 from lynqx._src.named import ufuncs
 from lynqx._src.named.constructors import array
+from lynqx._src.named.creation import ones
 from lynqx._src.named.indexing import NamedIndexUpdateHelper
 from lynqx._src.named.methods import _set_namedarray_attributes, register_namedarray_methods
 
 
 register_namedarray_methods()
 del register_namedarray_methods
-
-
-@pytest.fixture
-def x4():
-    return Axis(4, "x")
 
 
 FLOAT_OPERATORS = (
@@ -168,8 +163,8 @@ class TestUnaryOperatorDispatch:
 
 class TestUnsupportedOperators:
     def test_matmul_raises_type_error(self, x4):
-        a = array(jnp.ones((4,)), (x4,))
-        b = array(jnp.ones((4,)), (x4,))
+        a = ones(x4)
+        b = ones(x4)
 
         with pytest.raises(TypeError, match="matrix multiplication"):
             a @ b
@@ -180,19 +175,19 @@ class TestUnsupportedOperators:
         # to `__rmatmul__`) or raises some other error first isn't something
         # this test should have to pin down -- the thing actually owned by
         # this module is `_unimplemented_matmul` itself.
-        a = array(jnp.ones((4,)), (x4,))
+        a = ones(x4)
         with pytest.raises(TypeError, match="matrix multiplication"):
             a.__rmatmul__(jnp.ones((4,)))
 
     def test_setitem_raises_type_error(self, x4):
-        a = array(jnp.ones((4,)), (x4,))
+        a = ones(x4)
         with pytest.raises(TypeError, match="immutable"):
             a[0] = 1.0
 
 
 class TestAtProperty:
     def test_returns_named_index_update_helper(self, x4):
-        a = array(jnp.ones((4,)), (x4,))
+        a = ones(x4)
         assert isinstance(a.at, NamedIndexUpdateHelper)
 
 

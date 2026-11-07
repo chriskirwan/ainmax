@@ -7,6 +7,7 @@ from hypothesis import given, strategies as st
 from jax import P
 from lynqx._src.axis import Axis
 from lynqx._src.named.constructors import array
+from lynqx._src.named.creation import ones
 from lynqx._src.named.tensor_contractions import (
     dot,
     matmul,
@@ -15,21 +16,6 @@ from lynqx._src.named.tensor_contractions import (
     vecdot,
 )
 from lynqx._src.typing import PM
-
-
-@pytest.fixture
-def x4():
-    return Axis(4, "x")
-
-
-@pytest.fixture
-def y8():
-    return Axis(8, "y")
-
-
-@pytest.fixture
-def z16():
-    return Axis(16, "z")
 
 
 def _rand(seed, shape, dtype=jnp.float32):
@@ -42,11 +28,6 @@ def _named_rand(seed, *axes):
 
 def _assert_close(got, want, tol=1e-5):
     np.testing.assert_allclose(np.asarray(got), np.asarray(want), rtol=tol, atol=tol)
-
-
-# ---------------------------------------------------------------------------
-# dot
-# ---------------------------------------------------------------------------
 
 
 class TestDot:
@@ -141,8 +122,8 @@ class TestDot:
 
     def test_preferred_element_type_controls_output_dtype(self):
         i, j, k = Axis(3, "i"), Axis(4, "j"), Axis(5, "k")
-        a = array(jnp.ones((3, 4), dtype=jnp.int8), (i, j))
-        b = array(jnp.ones((4, 5), dtype=jnp.int8), (j, k))
+        a = ones((i, j), dtype=jnp.int8)
+        b = ones((j, k), dtype=jnp.int8)
 
         res = dot(a, b, ((("j",), ("j",)), ((), ())), preferred_element_type=jnp.int32)
 
@@ -157,8 +138,6 @@ class TestDot:
         res = dot(a, b, ((("j",), ("j",)), ((), ())), precision=jax.lax.Precision.HIGHEST)
 
         _assert_close(res.array, jnp.matmul(a.array, b.array, precision=jax.lax.Precision.HIGHEST))
-
-    # -- validation ---------------------------------------------------------
 
     def test_contract_length_mismatch_raises(self, x4, y8):
         a = _named_rand(0, x4, y8)
@@ -210,8 +189,6 @@ class TestDot:
         a = _named_rand(0, x4)
         with pytest.raises(TypeError, match="dot"):
             dot(a, object(), (((), ()), ((), ())))
-
-    # -- JAX composability --------------------------------------------------
 
     def test_composes_with_outer_jit(self):
         i, j, k = Axis(3, "i"), Axis(4, "j"), Axis(5, "k")
@@ -391,11 +368,6 @@ class TestVecdot:
         jtu.check_grads(f, (_rand(0, (3, 4)), _rand(1, (3, 4))), order=1, modes=["rev"], atol=1e-2, rtol=1e-2)
 
 
-# ---------------------------------------------------------------------------
-# matmul
-# ---------------------------------------------------------------------------
-
-
 class TestMatmul:
     def test_two_dimensional_matches_jnp_matmul(self):
         i, j, k = Axis(3, "i"), Axis(4, "j"), Axis(5, "k")
@@ -476,11 +448,6 @@ class TestMatmul:
         _assert_close(res.array, a.array @ b.array)
 
 
-# ---------------------------------------------------------------------------
-# outer
-# ---------------------------------------------------------------------------
-
-
 class TestOuter:
     def test_vectors_match_jnp_outer(self, x4, y8):
         a = _named_rand(0, x4)
@@ -523,8 +490,8 @@ class TestOuter:
             outer(a, a)
 
     def test_preferred_element_type(self, x4, y8):
-        a = array(jnp.ones((4,), dtype=jnp.int8), (x4,))
-        b = array(jnp.ones((8,), dtype=jnp.int8), (y8,))
+        a = ones(x4, dtype=jnp.int8)
+        b = ones(y8, dtype=jnp.int8)
 
         res = outer(a, b, preferred_element_type=jnp.int32)
 
@@ -544,11 +511,6 @@ class TestOuter:
             return outer(array(a, (x4,)), array(b, (y8,))).array.sum()
 
         jtu.check_grads(f, (_rand(0, (4,)), _rand(1, (8,))), order=1, modes=["rev"], atol=1e-2, rtol=1e-2)
-
-
-# ---------------------------------------------------------------------------
-# trace
-# ---------------------------------------------------------------------------
 
 
 class TestTrace:
@@ -619,7 +581,7 @@ class TestTrace:
         assert res.axes == (Axis(3),)
 
     def test_dtype_is_forwarded(self):
-        a = array(jnp.ones((3, 3), dtype=jnp.int8), (Axis(3, "i"), Axis(3, "j")))
+        a = ones((Axis(3, "i"), Axis(3, "j")), dtype=jnp.int8)
 
         res = trace(a, dtype=jnp.int32)
 

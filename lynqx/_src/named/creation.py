@@ -1,20 +1,27 @@
+import operator
+from functools import reduce
 from typing import Literal, overload
 
+import equinox as eqx
 import jax.lax
 import jax.numpy as jnp
 from jax.typing import DTypeLike
 
 from lynqx._src.axis_util import (
     axis_index,
+    axis_indices,
+    axis_names,
     axis_shape_to_tuple,
     axis_sizes,
     check_unique_axis_names,
+    resolve_axes,
 )
 from lynqx._src.named import constructors, util
 from lynqx._src.sharding import canonicalize_sharding
 from lynqx._src.typing import (
     Axis,
     AxisLike,
+    AxisSelection,
     AxisSelector,
     AxisShape,
     DuckTypedNamedArray,
@@ -390,3 +397,437 @@ def indices(
     if sparse:
         return tuple(constructors.array(idx, ax) for idx, ax in zip(jax_indices, dim_tuple))
     return constructors.array(jax_indices, out_axes)
+
+
+# Array creation operations
+
+
+@overload
+def linspace(
+    start: NamedArrayLike,
+    stop: NamedArrayLike,
+    axis: AxisLike,
+    endpoint: bool = True,
+    retstep: Literal[False] = False,
+    dtype: DTypeLike | None = None,
+    *,
+    out_sharding: ShardingLike | None = None,
+) -> NamedArray: ...
+
+
+@overload
+def linspace(
+    start: NamedArrayLike,
+    stop: NamedArrayLike,
+    axis: AxisLike,
+    endpoint: bool = True,
+    *,
+    retstep: Literal[True],
+    dtype: DTypeLike | None = None,
+    out_sharding: ShardingLike | None = None,
+) -> tuple[NamedArray, NamedArray]: ...
+
+
+@overload
+def linspace(
+    start: NamedArrayLike,
+    stop: NamedArrayLike,
+    axis: AxisLike,
+    endpoint: bool = True,
+    retstep: bool = False,
+    dtype: DTypeLike | None = None,
+    *,
+    out_sharding: ShardingLike | None = None,
+) -> NamedArray | tuple[NamedArray, NamedArray]: ...
+
+
+def linspace(
+    start: NamedArrayLike,
+    stop: NamedArrayLike,
+    axis: AxisLike,
+    endpoint: bool = True,
+    retstep: bool = False,
+    dtype: DTypeLike | None = None,
+    *,
+    out_sharding: ShardingLike | None = None,
+) -> NamedArray | tuple[NamedArray, NamedArray]:
+    """Return evenly spaced values over a specified interval along a new axis.
+
+    Values are generated over ``[start, stop]`` (inclusive when ``endpoint`` is ``True``) and returned along the new
+    ``axis``, with all remaining axes coming from broadcasting ``start`` and ``stop``.
+
+    Args:
+        start: The starting value(s).
+        stop: The ending value(s).
+        axis: The new axis along which the samples are generated. A string is treated as an unnamed axis of size
+            50 (matching NumPy's default); an `Axis` supplies both size and optional name.
+        endpoint: If ``True`` (default), ``stop`` is included.
+        retstep: If ``True``, also return the step size between samples.
+        dtype: Optional dtype of the output.
+        out_sharding: Optional sharding specification for the output array.
+
+    Returns:
+        A ``NamedArray`` of samples, or a tuple ``(samples, step)`` when ``retstep=True``.
+    """
+
+    if isinstance(axis, str):
+        axis = Axis(50, axis)  # numpy default
+
+    from lynqx._src.named import operations
+
+    (start, stop), common_axes = operations.broadcast_arrays_and_shape(start, stop)
+    if axis.name in axis_names(common_axes):
+        raise ValueError(f"Axis {axis} already exists in one of the input arrays.")
+
+    jax_array = jnp.linspace(start.array, stop.array, axis.size, endpoint=endpoint, retstep=retstep, dtype=dtype)
+
+    out_axes = (axis,) + common_axes
+    step = None
+    if retstep:
+        jax_array, jax_array_step = jax_array
+        step = constructors.array(jax_array_step, common_axes)
+
+    result = constructors.array(jax_array, out_axes, out_sharding=out_sharding)
+
+    return (result, step) if step is not None else result
+
+
+def logspace(
+    start: NamedArrayLike,
+    stop: NamedArrayLike,
+    axis: AxisLike,
+    endpoint: bool = True,
+    base: NamedArrayLike = 10.0,
+    dtype: DTypeLike | None = None,
+    *,
+    out_sharding: ShardingLike | None = None,
+) -> NamedArray:
+    """Return numbers spaced evenly on a log scale along a new axis.
+
+    Args:
+        start: ``base ** start`` is the starting value.
+        stop: ``base ** stop`` is the final value.
+        axis: The new axis along which the samples are generated. A string is treated as an unnamed axis of size 50;
+            an `Axis` supplies size and optional name.
+        endpoint: If ``True`` (default), ``stop`` is included.
+        base: The base of the log space. Defaults to 10.
+        dtype: Optional dtype of the output.
+        out_sharding: Optional sharding specification for the output array.
+
+    Returns:
+        A ``NamedArray`` of samples on a log scale.
+    """
+    if isinstance(axis, str):
+        axis = Axis(50, axis)  # numpy default
+
+    from lynqx._src.named import operations
+
+    (start, stop, base), common_axes = operations.broadcast_arrays_and_shape(start, stop, base)
+    if axis.name in axis_names(common_axes):
+        raise ValueError(f"Axis {axis} already exists in one of the input arrays")
+
+    jax_array = jnp.logspace(start.array, stop.array, axis.size, endpoint=endpoint, base=base.array, dtype=dtype)
+
+    out_axes = (axis,) + common_axes
+    return constructors.array(jax_array, out_axes, out_sharding=out_sharding)
+
+
+def geomspace(
+    start: NamedArrayLike,
+    stop: NamedArrayLike,
+    axis: AxisLike,
+    endpoint: bool = True,
+    dtype: DTypeLike | None = None,
+    *,
+    out_sharding: ShardingLike | None = None,
+) -> NamedArray:
+    """Return numbers spaced evenly on a geometric progression along a new axis.
+
+    Args:
+        start: The starting value(s) of the sequence.
+        stop: The final value(s) of the sequence.
+        axis: The new axis along which the samples are generated. A string is treated as an unnamed axis of size 50;
+            an `Axis` supplies size and optional name.
+        endpoint: If ``True`` (default), ``stop`` is included.
+        dtype: Optional dtype of the output.
+        out_sharding: Optional sharding specification for the output array.
+
+    Returns:
+        A ``NamedArray`` of samples on a geometric progression.
+    """
+
+    if isinstance(axis, str):
+        axis = Axis(50, axis)  # numpy default
+
+    from lynqx._src.named import operations
+
+    (start, stop), common_axes = operations.broadcast_arrays_and_shape(start, stop)
+    if axis.name in axis_names(common_axes):
+        raise ValueError(f"Axis {axis} already exists in one of the input arrays")
+
+    jax_array = jnp.geomspace(start.array, stop.array, axis.size, endpoint=endpoint, dtype=dtype)
+
+    out_axes = (axis,) + common_axes
+    return constructors.array(jax_array, out_axes, out_sharding=out_sharding)
+
+
+def delta(
+    shape: AxisShape,
+    axes: AxisSelection | None = None,
+    dtype: DTypeLike | None = None,
+    *,
+    out_sharding: ShardingLike | None = None,
+) -> NamedArray:
+    """Return a Kronecker delta over the selected axes of the given shape.
+
+    The result equals 1 where all selected axes share the same index and 0 elsewhere.
+
+    Args:
+        shape: The output shape.
+        axes: The axes to compare for equality. Defaults to all axes.
+        dtype: Optional dtype of the output. Defaults to ``float32``.
+        out_sharding: Optional sharding specification for the output array.
+
+    Returns:
+        A ``NamedArray`` with the given shape.
+    """
+    shape = axis_shape_to_tuple(shape)
+    indices = axis_indices(shape, axes)
+
+    if len(indices) < 2:
+        raise ValueError(f"delta requires at least 2 axes to compare, got {len(indices)}")
+    if len(set(indices)) != len(indices):
+        raise ValueError(f"delta requires distinct axes, got {axes!r} resolving to duplicate positions {indices}")
+
+    indices = tuple(sorted(indices))  # normalize to shape order; equality is symmetric, so this is free
+    spec = tuple(shape[i] for i in indices)
+
+    iotas = [iota(spec, i, dtype=jnp.uint32) for i in range(len(spec))]
+    eyes = [i1 == i2 for i1, i2 in zip(iotas[:-1], iotas[1:])]
+    result = reduce(operator.and_, eyes)
+
+    new_dtype = jnp.float32 if dtype is None else dtype
+    casted_result = eqx.tree_at(lambda m: m.array, result, replace_fn=lambda x: jnp.astype(x, new_dtype))
+    from lynqx._src.named import operations
+
+    return operations.broadcast_to(casted_result, shape, out_sharding=out_sharding)
+
+
+def identity(
+    shape: AxisShape,
+    axes: AxisSelection = (-1, -2),
+    dtype: DTypeLike | None = None,
+    *,
+    out_sharding: ShardingLike | None = None,
+) -> NamedArray:
+    """Return a square identity matrix over two selected axes of the given shape.
+
+    Args:
+        shape: The output shape.
+        axes: The two axes forming the matrix. Defaults to the last two axes.
+        dtype: Optional dtype of the output.
+        out_sharding: Optional sharding specification for the output array.
+
+    Returns:
+        A ``NamedArray`` with the given shape whose two selected axes form an identity matrix.
+    """
+
+    resolved = axis_shape_to_tuple(shape)
+    indices = axis_indices(resolved, axes)
+
+    if len(indices) != 2:
+        raise ValueError(f"identity requires exactly 2 axes, got {len(indices)} from {axes!r}")
+
+    a, b = resolved[indices[0]], resolved[indices[1]]
+    if a.size != b.size:
+        raise ValueError(
+            f"identity requires square axes, got sizes {a.size} and {b.size}; "
+            "use delta(...) directly for a non-square diagonal tensor"
+        )
+
+    return delta(resolved, axes, dtype=dtype, out_sharding=out_sharding)
+
+
+# Diagonal and triangular matrix operations
+
+
+def _tri_mask(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, k: int, *, upper: bool) -> NamedArray:
+    """Build a mask selecting the upper or lower triangle of a matrix-like array."""
+    idx0, idx1 = axis_indices(array.axes, (axis1, axis2))
+    if idx0 == idx1:
+        raise ValueError(f"axis1 and axis2 must be distinct, both resolved to position {idx0}")
+
+    # Keep the two axes in *array* order so broadcast_to needs no transpose.
+    spec = resolve_axes(array.axes, (idx0, idx1))
+
+    # axis1 plays "row", axis2 plays "column", wherever they sit in spec.
+    row_pos, col_pos = (0, 1) if idx0 < idx1 else (1, 0)
+    row = iota(spec, row_pos, dtype=jnp.int32)
+    col = iota(spec, col_pos, dtype=jnp.int32)
+
+    diff = col - row
+    mask = (diff >= k) if upper else (diff <= k)
+
+    from lynqx._src.named.operations import broadcast_to
+
+    return broadcast_to(mask, array.axes)
+
+
+def triu(a: NamedArrayLike, axis1: AxisSelector, axis2: AxisSelector, k: int = 0) -> NamedArray:
+    """Return the upper triangle of an array.
+
+    Args:
+        a: The input array.
+        axis1: The first axis of the matrix.
+        axis2: The second axis of the matrix.
+        k: Diagonal above which to keep elements. Defaults to 0.
+
+    Returns:
+        A ```NamedArray``` with elements below the ``k``-th diagonal zeroed out.
+    """
+
+    named = util.ensure_named("triu", a)
+    mask = _tri_mask(named, axis1, axis2, k, upper=True)
+    return constructors.array(jnp.where(mask.array, named.array, 0), named.axes)
+
+
+def tril(a: NamedArrayLike, axis1: AxisSelector, axis2: AxisSelector, k: int = 0) -> NamedArray:
+    """Return the lower triangle of an array.
+
+    Args:
+        a: The input array.
+        axis1: The first axis of the matrix.
+        axis2: The second axis of the matrix.
+        k: Diagonal below which to keep elements. Defaults to 0.
+
+    Returns:
+        A ```NamedArray``` with elements above the ``k``-th diagonal zeroed out.
+    """
+    named = util.ensure_named("tril", a)
+    mask = _tri_mask(named, axis1, axis2, k, upper=False)
+    return constructors.array(jnp.where(mask.array, named.array, 0), named.axes)
+
+
+def tri(shape: AxisShape, axes: AxisSelection = (-1, -2), k: int = 0, dtype: DTypeLike | None = None) -> NamedArray:
+    """Return an array with ones at and below the ``k``-th diagonal and zeros elsewhere.
+
+    Args:
+        shape: The output shape.
+        axes: The two axes forming the matrix. Defaults to the last two axes.
+        k: The diagonal offset. Defaults to 0.
+        dtype: Optional dtype of the output.
+
+    Returns:
+        A `NamedArray` with the given shape.
+    """
+    resolved = axis_shape_to_tuple(shape)
+    indices = axis_indices(resolved, axes)
+
+    a, b = indices
+
+    diag = ones(shape, dtype=dtype)
+    mask = _tri_mask(diag, a, b, k, upper=False)
+    return mask * diag
+
+
+def tril_indices(
+    n: int, k: int = 0, m: int | None = None, axis: AxisLike | tuple[AxisLike, AxisLike] | None = None
+) -> tuple[NamedArray, NamedArray]:
+    """Return the row and column indices of a lower-triangular matrix.
+
+    Args:
+        n: The row dimension of the matrix.
+        k: Diagonal offset. Defaults to ``0``.
+        m: The column dimension. Defaults to ``n``.
+        axis: Optional axis or pair of axes to attach to the returned index arrays.
+
+    Returns:
+        A pair of ``NamedArray`` objects containing the row and column indices of the selected lower triangle.
+    """
+
+    m = n if m is None else m
+    row_jax, col_jax = jnp.tril_indices(n, k, m)
+
+    axis_tuple = axis if isinstance(axis, tuple) else (axis, axis)
+    size_tuple = [row_jax.shape[0], col_jax.shape[0]]
+    row_axis, col_axis = [
+        util.resolve_new_axis(ax, sz, "tril_indices", "axis") for ax, sz in zip(axis_tuple, size_tuple)
+    ]
+
+    return constructors.array(row_jax, row_axis), constructors.array(col_jax, col_axis)
+
+
+def triu_indices(
+    n: int, k: int = 0, m: int | None = None, axis: AxisLike | tuple[AxisLike, AxisLike] | None = None
+) -> tuple[NamedArray, NamedArray]:
+    """Return the row and column indices of an upper-triangular matrix.
+
+    Args:
+        n: The row dimension of the matrix.
+        k: Diagonal offset. Defaults to ``0``.
+        m: The column dimension. Defaults to ``n``.
+        axis: Optional axis or pair of axes to attach to the returned index arrays.
+
+    Returns:
+        A pair of ``NamedArray`` objects containing the row and column indices of the selected upper triangle.
+    """
+
+    row_jax, col_jax = jnp.triu_indices(n, k, m)
+
+    axis_tuple = axis if isinstance(axis, tuple) else (axis, axis)
+    size_tuple = [row_jax.shape[0], col_jax.shape[0]]
+    row_axis, col_axis = [
+        util.resolve_new_axis(ax, sz, "tril_indices", "axis") for ax, sz in zip(axis_tuple, size_tuple)
+    ]
+
+    return constructors.array(row_jax, row_axis), constructors.array(col_jax, col_axis)
+
+
+def tril_indices_from(
+    a: NamedArrayLike,
+    k: int = 0,
+    axis: AxisLike | tuple[AxisLike, AxisLike] | None = None,
+) -> tuple[NamedArray, NamedArray]:
+    """Return the indices of the lower triangle of a 2-D array.
+
+    Args:
+        a: Input array. Must have ``a.ndim == 2`
+        k: Optional value that specifies the sub-diagonal on and above which the indices of the upper triangle are
+            returned. ``k=0`` refers to the main diagonal. ``k<0`` refers to the sub-diagonal below the main diagonal
+            and ``k>0`` refers to the sub-diagonal above the main diagonal.
+
+    Returns:
+        A tuple of two ``NamedArrays`` containing the indices of the lower triangle, one along each axis.
+    """
+    named = util.ensure_named("tril_indices_from", a)
+
+    if named.ndim != 2:
+        raise ValueError("tril_indices_from requires a two-dimensional array")
+
+    return tril_indices(named.axes[0].size, k, named.axes[1].size, axis)
+
+
+def triu_indices_from(
+    a: NamedArrayLike,
+    k: int = 0,
+    axis: AxisLike | tuple[AxisLike, AxisLike] | None = None,
+) -> tuple[NamedArray, NamedArray]:
+    """Return the indices of the upper triangle of a 2-D array.
+
+    Args:
+        a: Input array. Must have ``a.ndim == 2`
+        k: Optional value that specifies the sub-diagonal on and above which the indices of the upper triangle are
+            returned. ``k=0`` refers to the main diagonal. ``k<0`` refers to the sub-diagonal below the main diagonal
+            and ``k>0`` refers to the sub-diagonal above the main diagonal.
+
+    Returns:
+        A tuple of two ``NamedArrays`` containing the indices of the upper triangle, one along each axis.
+
+    """
+
+    named = util.ensure_named("triu_indices_from", a)
+
+    if named.ndim != 2:
+        raise ValueError("triu_indices_from requires a two-dimensional array")
+
+    return triu_indices(named.axes[0].size, k, named.axes[1].size, axis)
