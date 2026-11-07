@@ -1,38 +1,39 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
-from hypothesis import given
+from hypothesis import given, strategies as st
 from lynqx._src.axis import Axis
 from lynqx._src.named.constructors import array
 from lynqx._src.named.creation import (
     arange,
+    delta,
     empty,
     empty_like,
     full,
     full_like,
+    geomspace,
+    identity,
     iota,
+    linspace,
+    logspace,
     ones,
     ones_like,
+    tri,
+    tril,
+    triu,
     zeros,
     zeros_like,
 )
 from lynqx._src.partition import PM
-from strategies import disjoint_named_axis_tuples
+from strategies import disjoint_named_axis_tuples, named_array_and_axis_pair, named_arrays
 
 
-@pytest.fixture
-def x4():
-    return Axis(4, "x")
-
-
-@pytest.fixture
-def y8():
-    return Axis(8, "y")
-
-
-@pytest.fixture
-def z16():
-    return Axis(16, "z")
+def assert_named(res, axes, expected=None):
+    assert res.axes == tuple(axes)
+    assert res.array.shape == tuple(ax.size for ax in axes)
+    if expected is not None:
+        np.testing.assert_array_equal(res.array, expected)
 
 
 class TestZeros:
@@ -106,7 +107,7 @@ class TestLikeFunctions:
 
     @pytest.mark.parametrize("fn,_expected_fill", LIKE_FUNCTIONS, ids=LIKE_FUNCTION_IDS)
     def test_shape_argument_overrides_source_axes(self, fn, _expected_fill, x4, y8, z16):
-        a = array(jnp.ones((4, 8)), (x4, y8))
+        a = ones((x4, y8))
         got = fn(a, shape=(z16,))
         assert got.axes == (z16,)
 
@@ -119,13 +120,13 @@ class TestLikeFunctions:
 
 class TestFullLike:
     def test_uses_given_fill_value_and_source_axes(self, x4, y8):
-        a = array(jnp.zeros((4, 8)), (x4, y8))
+        a = zeros((x4, y8))
         got = full_like(a, 3.0)
         assert got.axes == a.axes
         assert jnp.array_equal(got.array, jnp.full((4, 8), 3.0))
 
     def test_shape_argument_overrides_source_axes(self, x4, y8, z16):
-        a = array(jnp.zeros((4, 8)), (x4, y8))
+        a = zeros((x4, y8))
         got = full_like(a, 3.0, shape=(z16,))
         assert got.axes == (z16,)
 
@@ -219,3 +220,255 @@ class TestOutSharding:
         with jax.set_mesh(mesh_1d):
             got = zeros({"batch": 8}, out_sharding=pm)
         assert got.axes == (Axis(8, "batch"),)
+
+
+# Creation operations moved from operations.py
+
+
+class TestLinspace:
+    def test_scalar_endpoints(self):
+        res = linspace(0.0, 1.0, Axis(5, "t"))
+        assert_named(res, (Axis(5, "t"),))
+        np.testing.assert_allclose(res.array, jnp.linspace(0.0, 1.0, 5))
+
+    def test_string_axis_uses_numpy_default_size(self):
+        res = linspace(0.0, 1.0, "t")
+        assert res.axes == (Axis(50, "t"),)
+
+    def test_anonymous_axis(self):
+        res = linspace(0.0, 1.0, Axis(5))
+        assert res.axes == (Axis(5),)
+
+    def test_endpoint_false(self):
+        res = linspace(0.0, 1.0, Axis(4, "t"), endpoint=False)
+        np.testing.assert_allclose(res.array, jnp.array([0.0, 0.25, 0.5, 0.75]))
+
+    def test_dtype(self):
+        assert linspace(0.0, 1.0, Axis(4, "t"), dtype=jnp.float16).array.dtype == jnp.float16
+
+    def test_retstep(self):
+        res, step = linspace(0.0, 1.0, Axis(5, "t"), retstep=True)
+        assert res.axes == (Axis(5, "t"),)
+        assert step.axes == ()
+        np.testing.assert_allclose(step.array, 0.25)
+
+    def test_new_axis_comes_first_then_input_axes(self):
+        start = zeros(Axis(3, "x"))
+        res = linspace(start, 1.0, Axis(5, "t"))
+        assert_named(res, (Axis(5, "t"), Axis(3, "x")))
+        np.testing.assert_allclose(res.array, jnp.linspace(jnp.zeros(3), 1.0, 5))
+
+    def test_start_and_stop_with_different_axes_broadcast(self):
+        s = jnp.arange(3.0)
+        e = jnp.arange(4.0) + 10
+        res = linspace(array(s, (Axis(3, "x"),)), array(e, (Axis(4, "y"),)), Axis(5, "t"))
+        assert res.axes == (Axis(5, "t"), Axis(3, "x"), Axis(4, "y"))
+        np.testing.assert_allclose(res.array, jnp.linspace(s[:, None], e[None, :], 5))
+
+    def test_retstep_has_broadcast_axes(self):
+        start = zeros(Axis(3, "x"))
+        _, step = linspace(start, 1.0, Axis(5, "t"), retstep=True)
+        assert step.axes == (Axis(3, "x"),)
+
+    def test_axis_name_clashing_with_input_raises(self):
+        start = zeros(Axis(3, "x"))
+        with pytest.raises(ValueError, match="already exists"):
+            linspace(start, 1.0, Axis(5, "x"))
+
+    @given(named_arrays(min_dims=0, max_dims=2), st.integers(min_value=2, max_value=10))
+    def test_endpoints_are_start_and_stop(self, start, n):
+        stop = array(start.array + 1.0, start.axes)
+        res = linspace(start, stop, Axis(n, "t"))
+        assert res.axes == (Axis(n, "t"), *start.axes)
+        np.testing.assert_allclose(res.array[0], start.array, rtol=1e-5, atol=1e-5)
+        np.testing.assert_allclose(res.array[-1], stop.array, rtol=1e-5, atol=1e-5)
+
+
+class TestLogspace:
+    def test_values_and_axes(self):
+        res = logspace(0.0, 2.0, Axis(3, "t"))
+        assert_named(res, (Axis(3, "t"),))
+        np.testing.assert_allclose(res.array, jnp.array([1.0, 10.0, 100.0]), rtol=1e-5)
+
+    def test_string_axis_default_size(self):
+        assert logspace(0.0, 1.0, "t").axes == (Axis(50, "t"),)
+
+    def test_base(self):
+        res = logspace(0.0, 2.0, Axis(3, "t"), base=2.0)
+        np.testing.assert_allclose(res.array, jnp.array([1.0, 2.0, 4.0]), rtol=1e-5)
+
+    def test_endpoint_false(self):
+        res = logspace(0.0, 2.0, Axis(2, "t"), endpoint=False)
+        np.testing.assert_allclose(res.array, jnp.logspace(0.0, 2.0, 2, endpoint=False), rtol=1e-5)
+
+    def test_array_inputs_add_trailing_axes(self):
+        start = zeros(Axis(3, "x"))
+        res = logspace(start, 2.0, Axis(4, "t"))
+        assert res.axes == (Axis(4, "t"), Axis(3, "x"))
+        np.testing.assert_allclose(res.array, jnp.logspace(jnp.zeros(3), 2.0, 4), rtol=1e-5)
+
+    def test_axis_name_clashing_with_input_raises(self):
+        start = zeros(Axis(3, "x"))
+        with pytest.raises(ValueError, match="already exists"):
+            logspace(start, 1.0, Axis(4, "x"))
+
+
+class TestGeomspace:
+    def test_values_and_axes(self):
+        res = geomspace(1.0, 100.0, Axis(3, "t"))
+        assert_named(res, (Axis(3, "t"),))
+        np.testing.assert_allclose(res.array, jnp.array([1.0, 10.0, 100.0]), rtol=1e-5)
+
+    def test_string_axis_default_size(self):
+        assert geomspace(1.0, 10.0, "t").axes == (Axis(50, "t"),)
+
+    def test_endpoint_false(self):
+        res = geomspace(1.0, 100.0, Axis(2, "t"), endpoint=False)
+        np.testing.assert_allclose(res.array, jnp.geomspace(1.0, 100.0, 2, endpoint=False), rtol=1e-5)
+
+    def test_array_inputs(self):
+        start = array(jnp.array([1.0, 2.0]), (Axis(2, "x"),))
+        res = geomspace(start, 64.0, Axis(4, "t"))
+        assert res.axes == (Axis(4, "t"), Axis(2, "x"))
+        np.testing.assert_allclose(res.array, jnp.geomspace(jnp.array([1.0, 2.0]), 64.0, 4), rtol=1e-5)
+
+    def test_axis_name_clashing_with_input_raises(self):
+        start = ones(Axis(2, "x"))
+        with pytest.raises(ValueError, match="already exists"):
+            geomspace(start, 10.0, Axis(4, "x"))
+
+
+class TestDelta:
+    def test_two_axes_is_identity_matrix(self):
+        res = delta({"x": 3, "y": 3}, ("x", "y"))
+        assert_named(res, (Axis(3, "x"), Axis(3, "y")), jnp.eye(3))
+
+    def test_default_dtype_is_float32(self):
+        assert delta({"x": 2, "y": 2}, ("x", "y")).array.dtype == jnp.float32
+
+    def test_explicit_dtype(self):
+        assert delta({"x": 2, "y": 2}, ("x", "y"), dtype=jnp.int32).array.dtype == jnp.int32
+
+    def test_three_axes_is_true_only_on_the_triple_diagonal(self):
+        res = delta({"x": 3, "y": 3, "z": 3}, ("x", "y", "z"))
+        expected = jnp.zeros((3, 3, 3)).at[jnp.arange(3), jnp.arange(3), jnp.arange(3)].set(1.0)
+        assert_named(res, (Axis(3, "x"), Axis(3, "y"), Axis(3, "z")), expected)
+
+    def test_other_axes_are_broadcast(self):
+        res = delta({"b": 4, "x": 2, "y": 2}, ("x", "y"))
+        assert_named(res, (Axis(4, "b"), Axis(2, "x"), Axis(2, "y")), jnp.broadcast_to(jnp.eye(2), (4, 2, 2)))
+
+    def test_axis_order_in_selection_is_irrelevant(self):
+        a = delta({"x": 3, "y": 3}, ("x", "y"))
+        b = delta({"x": 3, "y": 3}, ("y", "x"))
+        np.testing.assert_array_equal(a.array, b.array)
+
+    def test_selection_by_integer_position(self):
+        res = delta({"x": 3, "y": 3}, (0, 1))
+        np.testing.assert_array_equal(res.array, jnp.eye(3))
+
+    def test_non_square_gives_rectangular_identity(self):
+        res = delta({"x": 2, "y": 3}, ("x", "y"))
+        np.testing.assert_array_equal(res.array, jnp.eye(2, 3))
+
+    def test_single_axis_raises(self):
+        with pytest.raises(ValueError, match="at least 2 axes"):
+            delta({"x": 3, "y": 3}, "x")
+
+    def test_duplicate_axes_raise(self):
+        with pytest.raises(ValueError, match="distinct axes"):
+            delta({"x": 3, "y": 3}, ("x", "x"))
+
+    @given(st.integers(min_value=1, max_value=8), st.integers(min_value=2, max_value=4))
+    def test_total_mass_equals_axis_size(self, n, rank):
+        names = ["x", "y", "z", "w"][:rank]
+        res = delta({name: n for name in names}, tuple(names))
+        assert float(res.array.sum()) == n
+
+
+class TestIdentity:
+    def test_matches_eye(self):
+        res = identity({"x": 4, "y": 4})
+        assert_named(res, (Axis(4, "x"), Axis(4, "y")), jnp.eye(4))
+
+    def test_defaults_to_trailing_axes(self):
+        res = identity({"b": 2, "x": 3, "y": 3})
+        assert_named(res, (Axis(2, "b"), Axis(3, "x"), Axis(3, "y")), jnp.broadcast_to(jnp.eye(3), (2, 3, 3)))
+
+    def test_custom_axes(self):
+        res = identity({"x": 3, "b": 2, "y": 3}, ("x", "y"))
+        np.testing.assert_array_equal(res.array, jnp.broadcast_to(jnp.eye(3)[:, None, :], (3, 2, 3)))
+
+    def test_dtype(self):
+        assert identity({"x": 2, "y": 2}, dtype=jnp.int32).array.dtype == jnp.int32
+
+    def test_non_square_raises(self):
+        with pytest.raises(ValueError, match="square"):
+            identity({"x": 3, "y": 4})
+
+    def test_wrong_number_of_axes_raises(self):
+        with pytest.raises(ValueError, match="exactly 2 axes"):
+            identity({"x": 3, "y": 3, "z": 3}, ("x", "y", "z"))
+
+    @given(st.integers(min_value=1, max_value=12))
+    def test_matches_eye_for_any_size(self, n):
+        np.testing.assert_array_equal(identity({"x": n, "y": n}).array, jnp.eye(n))
+
+
+def known_bug(reason):
+    return pytest.mark.xfail(strict=True, reason=reason, raises=(ValueError, AssertionError))
+
+
+_TRI_ROLE_BUG = known_bug("Swapping triangle axis roles does not swap the selected triangle")
+
+
+class TestTriuTrilTri:
+    @pytest.mark.parametrize("k", [-1, 0, 1])
+    def test_triu_matches_jnp(self, square, k):
+        np.testing.assert_array_equal(triu(square, "x", "w", k).array, jnp.triu(square.array, k))
+
+    @pytest.mark.parametrize("k", [-1, 0, 1])
+    def test_tril_matches_jnp(self, square, k):
+        np.testing.assert_array_equal(tril(square, "x", "w", k).array, jnp.tril(square.array, k))
+
+    @pytest.mark.parametrize("k", [-1, 0, 1])
+    def test_tri_matches_jnp(self, k):
+        res = tri({"x": 3, "w": 3}, ("x", "w"), k=k)
+        np.testing.assert_array_equal(res.array, jnp.tri(3, 3, k))
+
+    @_TRI_ROLE_BUG
+    def test_swapping_axis_roles_turns_triu_into_tril(self, square):
+        np.testing.assert_array_equal(triu(square, "w", "x").array, tril(square, "x", "w").array)
+
+    def test_batch_axes_are_masked_independently(self):
+        a = array(jnp.arange(18.0).reshape(2, 3, 3) + 1, (Axis(2, "b"), Axis(3, "x"), Axis(3, "w")))
+        np.testing.assert_array_equal(tril(a, "x", "w").array, jnp.tril(a.array))
+
+    def test_non_square_axes(self, mat):
+        np.testing.assert_array_equal(triu(mat, "x", "y").array, jnp.triu(mat.array))
+
+    @pytest.mark.parametrize("fn", [triu, tril])
+    def test_axes_and_dtype_are_preserved(self, square, fn):
+        res = fn(square, "x", "w")
+        assert res.axes == square.axes
+        assert res.array.dtype == square.array.dtype
+
+    @pytest.mark.parametrize("fn", [triu, tril])
+    def test_idempotent(self, square, fn):
+        once = fn(square, "x", "w")
+        np.testing.assert_array_equal(fn(once, "x", "w").array, once.array)
+
+    @pytest.mark.parametrize("fn", [triu, tril])
+    def test_same_axis_twice_raises(self, square, fn):
+        with pytest.raises(ValueError):
+            fn(square, "x", "x")
+
+    def test_tri_dtype(self):
+        assert tri({"x": 3, "w": 3}, ("x", "w"), dtype=jnp.int32).array.dtype == jnp.int32
+
+    @given(named_array_and_axis_pair())
+    def test_triu_plus_strict_tril_reassembles_the_array(self, arr_axes):
+        a, ax1, ax2 = arr_axes
+        upper = triu(a, ax1.name, ax2.name)
+        lower = tril(a, ax1.name, ax2.name, -1)
+        np.testing.assert_array_equal(upper.array + lower.array, a.array)
