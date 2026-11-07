@@ -7,27 +7,13 @@ from lynqx._src.array import NamedArrayImpl
 from lynqx._src.axis import Axis
 from lynqx._src.named import reductions
 from lynqx._src.named.constructors import array
+from lynqx._src.named.creation import ones
 
 
 # Fixed axis shape shared by every table-driven test below, so a failure
 # always reports against the same, easy-to-reason-about geometry: a
 # 3x4x5 array over axes "batch", "x", "y".
 AXIS_SHAPE = (("batch", 3), ("x", 4), ("y", 5))
-
-
-@pytest.fixture
-def batch3():
-    return Axis(3, "batch")
-
-
-@pytest.fixture
-def x4():
-    return Axis(4, "x")
-
-
-@pytest.fixture
-def y5():
-    return Axis(5, "y")
 
 
 def _shape():
@@ -513,7 +499,7 @@ class TestQuantileValidation:
     )
     def test_multidimensional_q_raises(self, name):
         x = _make_named()
-        q = array(jnp.ones((2, 2)), (Axis(2, "q0"), Axis(2, "q1")))
+        q = ones((Axis(2, "q0"), Axis(2, "q1")))
 
         with pytest.raises(ValueError, match="scalar or a 1D array"):
             getattr(reductions, name)(x, q, axis="x")
@@ -567,7 +553,7 @@ class TestWrapReductionCallDirectly:
 
     def test_where_raises_when_unsupported(self, x4):
         x = _make_named()
-        mask = array(jnp.ones((4,), dtype=bool), (x4,))
+        mask = ones(x4, dtype=bool)
         wrapped = reductions.wrap_reduction_call(jnp.sum, supports_where=False)
 
         with pytest.raises(ValueError, match="where is not supported"):
