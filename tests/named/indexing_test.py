@@ -5,7 +5,10 @@ import pytest
 from hypothesis import given, strategies as st
 from lynqx._src.axis import Axis
 from lynqx._src.named.constructors import array
+from lynqx._src.named.creation import identity, ones, zeros
 from lynqx._src.named.indexing import (
+    choose,
+    diagonal,
     dynamic_slice,
     dynamic_update_slice,
     NamedIndexUpdateHelper,
@@ -19,25 +22,11 @@ register_namedarray_methods()
 del register_namedarray_methods
 
 
-@pytest.fixture
-def x4():
-    return Axis(4, "x")
-
-
-@pytest.fixture
-def y8():
-    return Axis(8, "y")
-
-
-@pytest.fixture
-def z16():
-    return Axis(16, "z")
-
-
-@pytest.fixture
-def named_3d(x4, y8, z16):
-    data = jnp.arange(4 * 8 * 16, dtype=jnp.float32).reshape((4, 8, 16))
-    return array(data, (x4, y8, z16))
+def assert_named(res, axes, expected=None):
+    assert res.axes == tuple(axes)
+    assert res.array.shape == tuple(ax.size for ax in axes)
+    if expected is not None:
+        np.testing.assert_array_equal(res.array, expected)
 
 
 class TestBasicGetitem:
@@ -115,13 +104,13 @@ class TestAt:
 
     def test_set_returns_full_source_axes(self, named_3d):
         ref = NamedIndexUpdateHelper(named_3d)[{"x": 1}]
-        updated = ref.set(array(jnp.zeros((8, 16)), ref.output_axes))
+        updated = ref.set(zeros(ref.output_axes))
         assert updated.axes == named_3d.axes
         assert jnp.array_equal(updated.array[1], jnp.zeros((8, 16)))
         assert jnp.array_equal(updated.array[0], named_3d.array[0])
 
     def test_set_broadcasts_a_smaller_named_value(self, x4, y8):
-        a = array(jnp.ones((4, 8)), (x4, y8))
+        a = ones((x4, y8))
         ref = NamedIndexUpdateHelper(a)[{"x": slice(1, 3)}]
         # value has only the "y" axis -- must broadcast across the sliced "x" axis
         value = array(jnp.arange(8.0), (y8,))
@@ -133,7 +122,7 @@ class TestAt:
         assert jnp.array_equal(updated.array[0], jnp.ones(8))
 
     def test_add_accumulates_rather_than_overwrites(self, x4):
-        a = array(jnp.ones((4,)), (x4,))
+        a = ones(x4)
         ref = NamedIndexUpdateHelper(a)[{"x": slice(0, 2)}]
         updated = ref.add(array(jnp.array([1.0, 1.0]), (Axis(2, "x"),)))
         assert jnp.array_equal(updated.array, jnp.array([2.0, 2.0, 1.0, 1.0]))
@@ -248,14 +237,14 @@ class TestDynamicSlice:
 
 class TestDynamicUpdateSlice:
     def test_matches_lax_dynamic_update_slice(self, x4):
-        a = array(jnp.zeros((4,)), (x4,))
+        a = zeros(x4)
         update = array(jnp.array([9.0, 9.0]), (Axis(2, "x"),))
         res = dynamic_update_slice(a, update, start={"x": 1})
         assert jnp.array_equal(res.array, jnp.array([0.0, 9.0, 9.0, 0.0]))
         assert res.axes == a.axes
 
     def test_axis_name_mismatch_raises(self, x4):
-        a = array(jnp.zeros((4,)), (x4,))
+        a = zeros(x4)
         update = array(jnp.array([9.0, 9.0]), (Axis(2, "not_x"),))
         with pytest.raises(ValueError, match="names disagree"):
             dynamic_update_slice(a, update, start={"x": 0})
@@ -298,14 +287,14 @@ class TestTakeAlongAxis:
         assert res.axes == a.axes
 
     def test_axis_name_mismatch_at_a_shared_position_raises(self):
-        a = array(jnp.ones((2, 3)), (Axis(2, "batch"), Axis(3, "t")))
-        bad_indices = array(jnp.zeros((2, 3), dtype=jnp.int32), (Axis(2, "not_batch"), Axis(3, "t")))
+        a = ones((Axis(2, "batch"), Axis(3, "t")))
+        bad_indices = zeros((Axis(2, "not_batch"), Axis(3, "t")), dtype=jnp.int32)
         with pytest.raises(ValueError, match="names disagree"):
             take_along_axis(a, bad_indices, axis="t")
 
     def test_gathered_axis_may_resize(self):
         a = array(jnp.arange(6.0).reshape(2, 3), (Axis(2, "batch"), Axis(3, "t")))
-        indices = array(jnp.zeros((2, 1), dtype=jnp.int32), (Axis(2, "batch"), Axis(1, "t")))
+        indices = zeros((Axis(2, "batch"), Axis(1, "t")), dtype=jnp.int32)
         res = take_along_axis(a, indices, axis="t")
         assert res.axes == (Axis(2, "batch"), Axis(1, "t"))
 
@@ -344,3 +333,91 @@ class TestAdvancedIndexingShapeAgreement:
 
         assert result.array.shape == real.shape
         assert tuple(ax.size for ax in result.axes) == real.shape
+
+
+# Indexing and selection operations moved from operations.py
+
+
+class TestDiagonal:
+    def test_square_matches_jnp(self, square):
+        res = diagonal(square, "x", "w")
+        assert_named(res, (Axis(3),), jnp.diagonal(square.array))
+
+    @pytest.mark.parametrize("offset", [-2, -1, 0, 1, 2])
+    def test_square_offsets_match_jnp(self, square, offset):
+        res = diagonal(square, "x", "w", offset=offset)
+        np.testing.assert_array_equal(res.array, jnp.diagonal(square.array, offset))
+
+    @pytest.mark.parametrize(
+        ("shape", "offset"),
+        [
+            ((3, 4), 0),
+            ((3, 4), -1),
+            ((4, 3), 0),
+            ((4, 3), 1),
+            ((3, 4), 1),
+            ((3, 4), 2),
+            ((4, 3), -1),
+        ],
+    )
+    def test_rectangular_offsets_match_jnp(self, shape, offset):
+        a = array(
+            jnp.arange(shape[0] * shape[1], dtype=jnp.float32).reshape(shape),
+            (Axis(shape[0], "x"), Axis(shape[1], "y")),
+        )
+        res = diagonal(a, "x", "y", offset=offset)
+        np.testing.assert_array_equal(res.array, jnp.diagonal(a.array, offset))
+
+    def test_batch_axes_are_kept_and_diagonal_axis_is_last(self):
+        a = array(jnp.arange(18.0).reshape(2, 3, 3), (Axis(2, "b"), Axis(3, "x"), Axis(3, "w")))
+        res = diagonal(a, "x", "w", "d")
+        assert_named(res, (Axis(2, "b"), Axis(3, "d")), jnp.diagonal(a.array, axis1=1, axis2=2))
+
+    def test_diagonal_axis_may_be_an_axis_object(self, square):
+        assert diagonal(square, "x", "w", Axis(3, "d")).axes == (Axis(3, "d"),)
+
+    def test_axes_may_be_given_in_either_order_and_by_position(self, square):
+        res = diagonal(square, 1, 0)
+        np.testing.assert_array_equal(res.array, jnp.diagonal(square.array))
+
+    def test_wrong_diagonal_axis_size_raises(self, square):
+        with pytest.raises(ValueError):
+            diagonal(square, "x", "w", Axis(5, "d"))
+
+    @given(st.integers(min_value=1, max_value=8))
+    def test_diagonal_of_identity_is_ones(self, n):
+        res = diagonal(identity({"x": n, "y": n}), "x", "y")
+        np.testing.assert_array_equal(res.array, jnp.ones(n))
+
+
+class TestChoose:
+    def test_matches_jnp(self):
+        x = Axis(4, "x")
+        idx = array(jnp.array([0, 1, 2, 1]), (x,))
+        choices = [array(jnp.full(4, float(i)), (x,)) for i in range(3)]
+        res = choose(idx, choices)
+        assert_named(res, (x,), jnp.array([0.0, 1.0, 2.0, 1.0]))
+
+    @pytest.mark.parametrize("mode", ["clip", "wrap"])
+    def test_out_of_bounds_modes(self, mode):
+        x = Axis(3, "x")
+        idx = array(jnp.array([0, 5, -1]), (x,))
+        choices = [ones(x), zeros(x)]
+        res = choose(idx, choices, mode=mode)
+        expected = jnp.choose(jnp.array([0, 5, -1]), [jnp.ones(3), jnp.zeros(3)], mode=mode)
+        np.testing.assert_array_equal(res.array, expected)
+
+    def test_choices_with_other_axes_are_broadcast(self):
+        idx = array(jnp.array([0, 1, 0]), (Axis(3, "x"),))
+        choices = [ones(Axis(4, "y")), zeros(Axis(4, "y"))]
+        res = choose(idx, choices)
+        assert res.axes == (Axis(3, "x"), Axis(4, "y"))
+        np.testing.assert_array_equal(res.array, jnp.array([[1.0] * 4, [0.0] * 4, [1.0] * 4]))
+
+    def test_python_scalar_choices(self):
+        idx = array(jnp.array([1, 0]), (Axis(2, "x"),))
+        np.testing.assert_array_equal(choose(idx, [10.0, 20.0]).array, jnp.array([20.0, 10.0]))
+
+    def test_no_choices_raises(self):
+        with pytest.raises(ValueError, match="at least one choice"):
+            choose(array(jnp.array([0]), (Axis(1, "x"),)), [])
