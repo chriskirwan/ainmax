@@ -11,7 +11,8 @@ from jax import Array
 from lynqx._src.axis import Axis, AxisLike, AxisSelector
 from lynqx._src.axis_util import axis_index, axis_indices, check_unique_axis_names, remove_axes
 from lynqx._src.named import constructors, operations, util
-from lynqx._src.sharding import canonicalize_sharding, ShardingLike
+from lynqx._src.partition import ShardingLike
+from lynqx._src.sharding import canonicalize_sharding
 from lynqx._src.typing import NamedArray, NamedArrayLike
 
 

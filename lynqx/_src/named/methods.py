@@ -7,12 +7,9 @@ from jax.typing import DTypeLike
 from lynqx._src.array import NamedArrayImpl
 from lynqx._src.axis import AxisLike, AxisSelection, AxisSelector, AxisShape
 from lynqx._src.named import constructors, indexing, operations, reductions, tensor_contractions, ufuncs, util
-from lynqx._src.sharding import device_put, ShardingLike
-from lynqx._src.typing import (
-    NamedArray,
-    NamedArrayLike,
-    ScalarLike,
-)
+from lynqx._src.partition import ShardingLike
+from lynqx._src.sharding import device_put
+from lynqx._src.typing import NamedArray, NamedArrayLike, ScalarLike
 
 
 def _all(

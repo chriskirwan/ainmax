@@ -7,7 +7,8 @@ from jax.typing import DTypeLike
 from lynqx._src.array import NamedArrayImpl
 from lynqx._src.axis import AxisShape
 from lynqx._src.axis_util import axis_shape_to_tuple
-from lynqx._src.sharding import canonicalize_sharding, ShardingLike
+from lynqx._src.partition import ShardingLike
+from lynqx._src.sharding import canonicalize_sharding
 from lynqx._src.typing import NamedArray
 
 
