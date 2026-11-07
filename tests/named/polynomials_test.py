@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from lynqx._src.axis import Axis
 from lynqx._src.named.constructors import array
+from lynqx._src.named.creation import ones
 from lynqx._src.named.polynomials import (
     poly,
     polyadd,
@@ -39,7 +40,7 @@ class TestCoefficientArithmetic:
     def test_axis_naming_and_raw_input_rank_check(self):
         assert polyadd(na(A), na(B), "out").axes[0].name == "out"
         with pytest.raises(ValueError, match="1-dimensional"):
-            polyadd(array(jnp.ones((2, 2)), {"a": 2, "b": 2}), na(B))
+            polyadd(ones({"a": 2, "b": 2}), na(B))
 
     def test_polydiv_namedtuple(self):
         got = polydiv(na(A), na(B), "d")
@@ -83,7 +84,7 @@ class TestEvaluation:
         m = jnp.diag(jnp.array([1.0, 2.0]))
         np.testing.assert_allclose(poly(array(m, {"a": 2, "b": 2})).array, jnp.poly(m))
         with pytest.raises(ValueError):
-            poly(array(jnp.ones((2, 3)), {"a": 2, "b": 3}))
+            poly(ones({"a": 2, "b": 3}))
 
 
 class TestPolyfit:
@@ -129,7 +130,7 @@ class TestPolyfit:
         assert got.C.axes[0] == Axis(4, "coef")
 
     def test_weights_and_errors(self):
-        w = array(jnp.ones(8), Axis(8))
+        w = ones(Axis(8))
         np.testing.assert_allclose(
             polyfit(self.xn(), array(self.y, Axis(8)), 2, w=w).array,
             jnp.polyfit(self.x, self.y, 2, w=self.x * 0 + 1),
