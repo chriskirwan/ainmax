@@ -8,7 +8,7 @@ import jax.numpy as jnp
 from jax import Device
 from jax.typing import DTypeLike
 
-from lynqx._src.axis import AxisLike
+from lynqx._src.axis import Axis, AxisLike, AxisSelection, AxisSelector, AxisShape
 from lynqx._src.axis_util import (
     axis_index,
     axis_indices,
@@ -21,8 +21,8 @@ from lynqx._src.axis_util import (
     validate_unique_axes,
 )
 from lynqx._src.named import constructors, reductions, ufuncs, util
-from lynqx._src.sharding import canonicalize_sharding
-from lynqx._src.typing import Axis, AxisSelection, AxisSelector, AxisShape, NamedArray, NamedArrayLike, ShardingLike
+from lynqx._src.sharding import canonicalize_sharding, ShardingLike
+from lynqx._src.typing import NamedArray, NamedArrayLike
 
 
 # Utility functions

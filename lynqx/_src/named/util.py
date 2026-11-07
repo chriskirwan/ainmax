@@ -4,9 +4,10 @@ from typing import Any, overload, TypeVar
 import jax.numpy as jnp
 
 from lynqx._src.array import NamedArrayImpl
+from lynqx._src.axis import Axis, AxisLike
 from lynqx._src.axis_util import match_axes
 from lynqx._src.filters import is_named_array, is_scalar
-from lynqx._src.typing import Axis, AxisLike, NamedArray, NamedArrayLike
+from lynqx._src.typing import NamedArray, NamedArrayLike
 
 
 T = TypeVar("T")
