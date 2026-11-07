@@ -59,9 +59,13 @@ jobs:
         with:
           path: .testmondata
           key: testmon-linux-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
-          restore-keys: testmon-linux-py${{ matrix.python-version }}
+          restore-keys: |
+            testmon-linux-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-
+            testmon-linux-py${{ matrix.python-version }}-
 
       - name: Test with Python ${{ matrix.python-version }}
+        env:
+          COVERAGE_CORE: ctrace
         run: uv run pytest --testmon
 
       - name: Save Testmon data
@@ -69,4 +73,4 @@ jobs:
         uses: actions/cache/save@v6.1.0
         with:
           path: .testmondata
-          key: testmon-linux-py${{ matrix.python-version }}-${{ github.sha }}
+          key: testmon-linux-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
