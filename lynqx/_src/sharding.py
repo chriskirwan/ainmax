@@ -8,10 +8,13 @@ from jax import Device, NamedSharding, P
 from jax.api_util import flatten_axes
 from jaxtyping import PyTree
 
+from lynqx._src.axis import AxisSpec
+from lynqx._src.basearray import NamedArray
 from lynqx._src.filters import assert_single_array_leaf, is_named_array
-from lynqx._src.typing import AxisSpec, NamedArray, PM, ShardingLike
+from lynqx._src.partition import PM, ShardingLike
 
 
+# TODO: rename to resolve_sharding
 def canonicalize_sharding(axes: AxisSpec, sharding: ShardingLike | None, fn_name: str) -> NamedSharding | P | None:
     """Convert a Lynqx sharding specification to a JAX sharding specification.
 
@@ -31,9 +34,9 @@ def canonicalize_sharding(axes: AxisSpec, sharding: ShardingLike | None, fn_name
         )
 
     mesh = jax.sharding.get_abstract_mesh()
-    if isinstance(sharding, PM) and mesh.empty:
+    if mesh.empty:
         raise ValueError(
-            "Using `PartitionSpec` when you are not inside a mesh context is not allowed. Please pass a "
+            "Using `PM` when you are not inside a mesh context is not allowed. Please pass a "
             "`NamedSharding` instance or enter into a mesh context via `jax.set_mesh`"
         )
 

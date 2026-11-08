@@ -6,6 +6,7 @@ import jax.numpy as jnp
 from jax.lax import dot as lax_dot, PrecisionLike
 from jax.typing import DTypeLike
 
+from lynqx._src.axis import Axis, AxisSelector
 from lynqx._src.axis_util import (
     axis_indices,
     axis_names,
@@ -14,8 +15,9 @@ from lynqx._src.axis_util import (
     remove_axes,
 )
 from lynqx._src.named import constructors, util
+from lynqx._src.partition import ShardingLike
 from lynqx._src.sharding import canonicalize_sharding
-from lynqx._src.typing import Axis, AxisSelector, NamedArray, NamedArrayLike, ShardingLike
+from lynqx._src.typing import NamedArray, NamedArrayLike
 
 
 MatrixSpec = tuple[AxisSelector, AxisSelector]

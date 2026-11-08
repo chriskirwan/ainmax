@@ -30,7 +30,9 @@ import jax.numpy as jnp
 import pytest
 from jax import NamedSharding, P
 from lynqx._src.array import NamedArrayImpl
+from lynqx._src.axis import AxisShape
 from lynqx._src.axis_util import axis_shape_to_tuple, axis_sizes
+from lynqx._src.partition import PM
 from lynqx._src.sharding import (
     auto_mesh_axes,
     canonicalize_sharding,
@@ -38,7 +40,6 @@ from lynqx._src.sharding import (
     reshard,
     with_sharding_constraint,
 )
-from lynqx._src.typing import AxisShape, PM
 
 
 def named(a: Any, shape: AxisShape):

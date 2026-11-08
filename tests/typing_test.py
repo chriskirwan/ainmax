@@ -3,19 +3,17 @@ import pytest
 from beartype import beartype
 from jaxtyping import jaxtyped, TypeCheckError
 from jaxtyping._storage import pop_shape_memo, push_shape_memo
-from lynqx._src.custom_types import (
-    _make_dtype_specifier,
+from lynqx._src.named.creation import ones
+from lynqx._src.typing import (
+    _make_dtype,
     _make_named_array_type,
     _validate_ordered,
     _validate_unordered,
-    NamedArrayAxisError,
-    NamedAxisSpec,
-)
-from lynqx._src.named.creation import ones
-from lynqx._src.typing import (
     Complex,
     Float,
     Int,
+    NamedArrayAxisError,
+    NamedAxisSpec,
     Shaped,
 )
 
@@ -331,8 +329,8 @@ class TestCaching:
     def test_dtype_specifier_is_cached_per_jt_dtype(self):
         import jaxtyping as jt
 
-        s1 = _make_dtype_specifier(jt.Float)
-        s2 = _make_dtype_specifier(jt.Float)
+        s1 = _make_dtype(jt.Float)
+        s2 = _make_dtype(jt.Float)
         assert s1 is s2
 
     def test_repeated_annotation_syntax_reuses_cache(self):

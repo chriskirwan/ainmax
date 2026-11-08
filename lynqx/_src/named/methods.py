@@ -5,19 +5,11 @@ from jax.lax import PrecisionLike
 from jax.typing import DTypeLike
 
 from lynqx._src.array import NamedArrayImpl
-from lynqx._src.axis import AxisSelector
+from lynqx._src.axis import AxisLike, AxisSelection, AxisSelector, AxisShape
 from lynqx._src.named import constructors, indexing, operations, reductions, tensor_contractions, ufuncs, util
+from lynqx._src.partition import ShardingLike
 from lynqx._src.sharding import device_put
-from lynqx._src.typing import (
-    AxisLike,
-    AxisSelection,
-    AxisShape,
-    NamedArray,
-    NamedArrayLike,
-    NamedIndex,
-    ScalarLike,
-    ShardingLike,
-)
+from lynqx._src.typing import NamedArray, NamedArrayLike, ScalarLike
 
 
 def _all(
@@ -479,7 +471,7 @@ def _operator_rrshift(self, other) -> NamedArray:
     return ufuncs.right_shift(other, self)
 
 
-def _getitem(self: NamedArray, index: NamedIndex) -> NamedArray:
+def _getitem(self: NamedArray, index: indexing.NamedIndex) -> NamedArray:
     positional, output_axes = indexing.resolve_index(self.axes, index, fn_name="__getitem__")
     return constructors.array(self.array[positional], output_axes)
 

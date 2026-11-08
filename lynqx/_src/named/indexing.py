@@ -8,20 +8,16 @@ import jax.numpy as jnp
 import numpy as np
 from jax import Array
 
+from lynqx._src.axis import Axis, AxisLike, AxisSelector
 from lynqx._src.axis_util import axis_index, axis_indices, check_unique_axis_names, remove_axes
 from lynqx._src.named import constructors, operations, util
+from lynqx._src.partition import ShardingLike
 from lynqx._src.sharding import canonicalize_sharding
-from lynqx._src.typing import (
-    Axis,
-    AxisIndex,
-    AxisLike,
-    AxisSelector,
-    NamedArray,
-    NamedArrayLike,
-    NamedIndex,
-    ShardingLike,
-)
+from lynqx._src.typing import NamedArray, NamedArrayLike
 
+
+AxisIndex = int | slice | NamedArray | None
+NamedIndex = AxisIndex | EllipsisType | tuple[AxisIndex | EllipsisType, ...] | Mapping[AxisSelector, AxisIndex]
 
 StaticInt = int | np.integer
 StaticScalar = np.bool_ | np.number | bool | int | float | complex

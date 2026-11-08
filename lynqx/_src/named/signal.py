@@ -4,9 +4,10 @@ import jax.numpy as jnp
 from jax.lax import PrecisionLike
 from jax.typing import DTypeLike
 
+from lynqx._src.axis import Axis, AxisLike, AxisSelector
 from lynqx._src.axis_util import axis_index
 from lynqx._src.named import constructors, util
-from lynqx._src.typing import Axis, AxisLike, AxisSelector, NamedArray, NamedArrayLike
+from lynqx._src.typing import NamedArray, NamedArrayLike
 
 
 def _signal_1d(name: str, x: NamedArrayLike) -> NamedArray:
