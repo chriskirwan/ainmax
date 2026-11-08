@@ -15,7 +15,7 @@ from lynqx._src.named.tensor_contractions import (
     trace,
     vecdot,
 )
-from lynqx._src.typing import PM
+from lynqx._src.partition import PM
 
 
 def _rand(seed, shape, dtype=jnp.float32):
