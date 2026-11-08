@@ -75,25 +75,29 @@ _SIZE_RE = re.compile(r"[1-9][0-9]*")
 def _parse_string_token(tok: str) -> NamedAxis:
     name, sep, size_str = tok.partition(":")
     if sep == "" and name.isdigit():
+        if not _SIZE_RE.fullmatch(name):
+            raise ValueError(f"Invalid size {name!r}")
         return NamedAxis(None, int(name))
 
     if name == "_" or not name:
         parsed_name = None
     else:
-        validate_axis_name(name)
+        try:
+            validate_axis_name(name)
+        except ValueError as exc:
+            raise ValueError(f"Invalid axis token {tok!r}") from exc
         parsed_name = name
 
     parsed_size: int | str | None = None
     if sep == ":":
-        size_str = size_str.strip()
-        if size_str == "*" or not size_str:
+        if size_str == "*":
             parsed_size = None
-        elif size_str.isdigit():
+        elif _SIZE_RE.fullmatch(size_str):
             parsed_size = int(size_str)
         elif size_str.isidentifier():
             parsed_size = size_str
         else:
-            raise ValueError(f"Invalid axis size specification {size_str!r} in token {tok!r}")
+            raise ValueError(f"Invalid size {size_str!r} in token {tok!r}")
 
     return NamedAxis(parsed_name, parsed_size)
 
@@ -122,10 +126,13 @@ class NamedAxisSpec:
         # Normalize spec input into a raw string representation or handle sequence directly
         if isinstance(spec, str):
             self._raw = spec.strip()
-            tokens, ordered, leading, trailing, wildcard = self._parse_string_spec(self._raw)
+            tokens, ordered, leading, trailing, wildcard = self._parse_string_spec(spec)
         elif isinstance(spec, (tuple, list, set, frozenset)):
             ordered = not isinstance(spec, (set, frozenset))
             named_axes = [NamedAxis.of(x) for x in spec]
+            if not ordered and any(axis.name is None for axis in named_axes):
+                raise ValueError("An unordered specification cannot contain an anonymous axis")
+            _validate_unique_axis_names(named_axes)
             tokens = tuple(_AxisToken(a.name, a.size) for a in named_axes)
             leading = trailing = not ordered
             wildcard = False
@@ -147,17 +154,25 @@ class NamedAxisSpec:
 
     @staticmethod
     def _parse_string_spec(dim_str: str) -> tuple[tuple[_AxisToken, ...], bool, bool, bool, bool]:
-        if dim_str == "...":
+        if dim_str.strip() == "...":
             return (), False, True, True, True
         if dim_str == "":
             return (), True, False, False, False
+        if not dim_str.strip():
+            return (), False, True, True, False
 
-        rest = dim_str
-        if rest.startswith("{") and rest.endswith("}"):
+        rest = dim_str.strip()
+        has_brace = rest.startswith("{") or rest.endswith("}")
+        if has_brace and not (rest.startswith("{") and rest.endswith("}")):
+            raise ValueError(f"Invalid braced axis specification {rest!r}")
+
+        if rest.startswith("{"):
             ordered = False
             inner = rest[1:-1].strip()
             if inner == "...":
                 return (), False, True, True, True
+            if "..." in inner:
+                raise ValueError("Ellipsis is not meaningful inside a braced axis specification")
             raw_tokens = inner.split()
             leading = trailing = True
         else:
@@ -171,12 +186,39 @@ class NamedAxisSpec:
                 unbraced = unbraced[:-1]
             raw_tokens = unbraced
 
-        parsed = tuple(_AxisToken(a.name, a.size) for a in (_parse_string_token(t) for t in raw_tokens))
+            if "..." in unbraced:
+                raise ValueError("Ellipsis may only appear at the very start or end of an ordered spec")
+            if leading and trailing:
+                raise ValueError(
+                    "An ordered spec cannot allow extra axes on both ends; use a contiguous-subsequence-anywhere spec"
+                )
+
+        named_axes = [_parse_string_token(token) for token in raw_tokens]
+        if not ordered and any(axis.name is None for axis in named_axes):
+            raise ValueError("An unordered specification cannot contain an anonymous axis")
+        _validate_unique_axis_names(named_axes)
+        parsed = tuple(_AxisToken(axis.name, axis.size) for axis in named_axes)
         return parsed, ordered, leading, trailing, False
 
     def _finalize(self) -> None:
         self._key = (self.ordered, self.leading_extra, self.trailing_extra, self.is_wildcard, self.tokens)
-        self._describe = f"axesspec({self._raw!r})"
+        if self.is_wildcard:
+            self._describe = "any axes (wildcard)"
+        elif not self.tokens and self.ordered:
+            self._describe = "scalar (no axes)"
+        elif not self.ordered:
+            self._describe = "any axes (unordered, open)"
+        else:
+            axes = " ".join(
+                (token.name if token.name is not None else "_") + (f":{token.size}" if token.size is not None else "")
+                for token in self.tokens
+            )
+            if self.leading_extra:
+                self._describe = f"ordered axes that end with {axes}"
+            elif self.trailing_extra:
+                self._describe = f"ordered axes that start with {axes}"
+            else:
+                self._describe = f"ordered, exact axes {axes}"
 
     def describe(self) -> str:
         return self._describe
@@ -200,6 +242,15 @@ def _bind_axis(name: str, size: int) -> None:
         raise NamedArrayAxisError(
             f"Size mismatch for axis {name!r}: got {size}, but a previous argument bound {name!r}={existing}"
         )
+
+
+def _validate_unique_axis_names(axes: Iterable[NamedAxis]) -> None:
+    seen: set[str] = set()
+    for axis in axes:
+        if axis.name is not None:
+            if axis.name in seen:
+                raise ValueError(f"Duplicate named axis {axis.name!r}")
+            seen.add(axis.name)
 
 
 def _token_matches(axis: Axis, token: _AxisToken) -> bool:
@@ -245,6 +296,8 @@ def _validate_unordered(axes: tuple[Axis, ...], spec: NamedAxisSpec) -> None:
         size = named[t.name]
         if t.size is not None and isinstance(t.size, int) and size != t.size:
             raise NamedArrayAxisError(f"Axis {t.name!r} has size {size}, expected {t.size}")
+        if isinstance(t.size, str):
+            _bind_axis(t.size, size)
         _bind_axis(t.name, size)
 
 
@@ -340,6 +393,8 @@ def _make_dtype(jt_dtype: Any) -> type:
             )
             if is_named:
                 return _make_named_array_type(jt_dtype, spec_input)
+            if isinstance(spec_input, str) and ("{" in spec_input or "}" in spec_input):
+                raise TypeError("Braced axis syntax is only valid for NamedArray")
             return jt_dtype[array_type, spec_input]
 
     _NamedAwareDtype.__name__ = jt_dtype.__name__
