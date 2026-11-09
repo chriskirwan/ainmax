@@ -8,6 +8,7 @@ from jax import Array
 from jax.sharding import Sharding
 
 from lynqx._src.axis_util import check_unique_axis_names
+from lynqx._src.config import config
 from lynqx._src.typing import Axis, NamedArray
 
 
@@ -75,15 +76,19 @@ class NamedArrayImpl(NamedArray, eqx.Module):
         Handles ``array=None`` gracefully (equinox filtered/partitioned pytrees).
         """
         indent: int = kwargs.get("indent", 2)
-        verbose: bool = kwargs.get("verbose", False)
+        short_arrays: bool = kwargs.get("short_arrays", True) and config.short_arrays
+        pdoc_kwargs = {"short_arrays": short_arrays, "indent": indent}
 
-        array = self.array  # may be None after eqx.filter / partition
-        axes = self.axes  # always a tuple[Axis, ...]
+        array = self.array
+        axes = self.axes
 
-        if verbose or array is None:
+        if not short_arrays or array is None:
             return wl.bracketed(
                 begin=wl.TextDoc("NamedArray("),
-                docs=wl.named_objs([("array", array), ("axes", axes)], **kwargs),
+                docs=[
+                    wl.TextDoc("array=") + wl.pdoc(array, **pdoc_kwargs),
+                    wl.TextDoc("axes=") + wl.pdoc(axes, **pdoc_kwargs),
+                ],
                 sep=wl.comma,
                 end=wl.TextDoc(")"),
                 indent=indent,
