@@ -83,7 +83,7 @@ jobs:
 
       - name: Full tests
         if: (github.ref == 'refs/heads/main' && github.event_name != 'pull_request') || steps.selective.outcome == 'failure'
-        run: rm .testmondata & uv run pytest -- testmon
+        run: uv run pytest -- testmon
 
       # Save caches (main only)
       - name: Save Testmon cache
