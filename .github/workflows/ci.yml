@@ -77,17 +77,17 @@ jobs:
 
       - name: Selective tests (testmon)
         id: selective
-        if: github.event_name == 'pull_request'
+        if: github.ref != 'refs/heads/main' || github.event_name == 'pull_request'
         continue-on-error: true
         run: uv run pytest --testmon
 
       - name: Full tests
-        if: github.event_name != 'pull_request' || steps.selective.outcome == 'failure'
-        run: uv run pytest
+        if: (github.ref == 'refs/heads/main' && github.event_name != 'pull_request') || steps.selective.outcome == 'failure'
+        run: rm .testmondata & uv run pytest -- testmon
 
       # Save caches (main only)
       - name: Save Testmon cache
-        if: success() && github.ref == 'refs/heads/main'
+        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/cache/save@v6.1.0
         with:
           path: .testmondata
