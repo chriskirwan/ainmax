@@ -58,11 +58,6 @@ def standard_selection():
     return (Axis(4, "batch"), Axis(8, "head"), Axis(16))
 
 
-# ---------------------------------------------------------------------------
-# Compatibility
-# ---------------------------------------------------------------------------
-
-
 class TestIsAxisCompatible:
     @pytest.mark.parametrize(
         "a,b,expected",
@@ -95,11 +90,6 @@ class TestIsAxisCompatible:
     @given(axes_strategy)
     def test_reflexive(self, a):
         assert is_axis_compatible(a, a) is True
-
-
-# ---------------------------------------------------------------------------
-# Unique Axis Checking & Validation
-# ---------------------------------------------------------------------------
 
 
 class TestCheckUniqueAxisNames:
@@ -248,11 +238,6 @@ class TestValidateUniqueAxes:
         assert some_fn.__doc__ == "Some docstring."
 
 
-# ---------------------------------------------------------------------------
-# Normalization & Spec Conversion (Consolidated)
-# ---------------------------------------------------------------------------
-
-
 class TestAxisNormalization:
     @pytest.mark.parametrize(
         "func, input_spec, expected",
@@ -329,11 +314,6 @@ class TestAxisProperties:
     def test_is_named_is_anonymous(self, axis, expected_named, expected_anon):
         assert is_named_axis(axis) is expected_named
         assert is_anonymous_axis(axis) is expected_anon
-
-
-# ---------------------------------------------------------------------------
-# Axis Index & Resolution
-# ---------------------------------------------------------------------------
 
 
 class TestAxisIndex:
@@ -453,11 +433,6 @@ class TestMatchAxes:
         result = match_axes((), ())
         assert isinstance(result, MatchAxisResult)
         assert result == MatchAxisResult((), (), ())
-
-
-# ---------------------------------------------------------------------------
-# Set-Like Axis Operations
-# ---------------------------------------------------------------------------
 
 
 class TestUnionAxes:
