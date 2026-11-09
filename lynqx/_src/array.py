@@ -2,6 +2,7 @@ import operator as op
 
 import equinox as eqx
 import jax.numpy as jnp
+import numpy as np
 import wadler_lindig as wl
 from jax import Array
 from jax.sharding import Sharding
@@ -138,6 +139,12 @@ class NamedArrayImpl(NamedArray, eqx.Module):
 
     def __iter__(self):
         return self.array.__iter__()
+
+    def __array__(self, dtype: np.dtype | None = None, context: None = None, copy: bool | None = None):
+        del context  # unused
+
+        kwds = {} if copy is None else {"copy": copy}
+        return np.asarray(self.array, dtype=dtype, **kwds)  # pyrefly: ignore[no-matching-overload]
 
 
 def _short_dtype(array) -> str:
