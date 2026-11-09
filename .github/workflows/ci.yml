@@ -28,49 +28,74 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
       - name: Install dependencies
-        run: uv sync --group dev --group test --python 3.14
+        run: uv sync --group dev --group test
       - name: Lint
         run: uv run ruff check .
       - name: Typecheck
         run: uv run pyrefly check
-
   test:
     name: Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
+
+    env:
+      COVERAGE_CORE: ctrace
+      JAX_COMPILATION_CACHE_DIR: /tmp/jax_cache
+      JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS: "0"
+
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - name: Install uv and set Python version
-        uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - name: Install dependencies
-        run: uv sync --group test --python ${{ matrix.python-version }}
 
-      - name: Restore Testmon data
-        uses: actions/cache/restore@v6.1.0
+      - run: uv sync --no-default-groups --group test --python ${{ matrix.python-version }}
+
+      # Testmon cache
+      - uses: actions/cache/restore@v6.1.0
         with:
           path: .testmondata
-          key: testmon-linux-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
+          key: testmon-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
           restore-keys: |
-            testmon-linux-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-
-            testmon-linux-py${{ matrix.python-version }}-
+            testmon-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-
 
-      - name: Test with Python ${{ matrix.python-version }}
-        env:
-          COVERAGE_CORE: ctrace
+      # JAX compilation cache
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: /tmp/jax_cache
+          key: jax-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
+          restore-keys: |
+            jax-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-
+
+      - name: Selective tests (testmon)
+        id: selective
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
         run: uv run pytest --testmon
 
-      - name: Save Testmon data
-        if: always()
+      - name: Full tests
+        if: github.event_name != 'pull_request' || steps.selective.outcome == 'failure'
+        run: uv run pytest
+
+      # Save caches (main only)
+      - name: Save Testmon cache
+        if: success() && github.ref == 'refs/heads/main'
         uses: actions/cache/save@v6.1.0
         with:
           path: .testmondata
-          key: testmon-linux-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
+          key: testmon-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
+
+      - name: Save JAX compilation cache
+        if: success() && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: /tmp/jax_cache
+          key: jax-py${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}-${{ github.sha }}
