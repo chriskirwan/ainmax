@@ -15,7 +15,6 @@ from lynqx._src.axis_util import (
     axis_shape_to_tuple,
     axis_sizes,
     check_unique_axis_names,
-    resolve_axes,
 )
 from lynqx._src.named import constructors, util
 from lynqx._src.partition import ShardingLike
@@ -653,20 +652,24 @@ def _tri_mask(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, k: in
     if idx0 == idx1:
         raise ValueError(f"axis1 and axis2 must be distinct, both resolved to position {idx0}")
 
-    # Keep the two axes in *array* order so broadcast_to needs no transpose.
-    spec = resolve_axes(array.axes, (idx0, idx1))
-
-    # axis1 plays "row", axis2 plays "column", wherever they sit in spec.
-    row_pos, col_pos = (0, 1) if idx0 < idx1 else (1, 0)
-    row = iota(spec, row_pos, dtype=jnp.int32)
-    col = iota(spec, col_pos, dtype=jnp.int32)
-
-    diff = col - row
-    mask = (diff >= k) if upper else (diff <= k)
-
     from lynqx._src.named.operations import broadcast_to
 
-    return broadcast_to(mask, array.axes)
+    idx0, idx1 = axis_indices(array.axes, (axis1, axis2))
+    if idx0 == idx1:
+        raise ValueError(f"axis1 and axis2 must be distinct, both resolved to position {idx0}")
+
+    ax1 = array.axes[idx0]  # row axis, as named by axis1
+    ax2 = array.axes[idx1]  # column axis, as named by axis2
+
+    # Rank-1 iotas along each named axis, then extended-broadcast each to the
+    # full array axes.  broadcast_to transposes/expands, so the two results
+    # have identical axes in identical order and subtract cleanly via ufuncs.
+    row = broadcast_to(iota(ax1, dtype=jnp.int32), array.axes)
+    col = broadcast_to(iota(ax2, dtype=jnp.int32), array.axes)
+
+    diff = col - row  # ufuncs.subtract: same axes, elementwise
+    mask = (diff >= k) if upper else (diff <= k)
+    return mask
 
 
 def triu(a: NamedArrayLike, axis1: AxisSelector, axis2: AxisSelector, k: int = 0) -> NamedArray:
