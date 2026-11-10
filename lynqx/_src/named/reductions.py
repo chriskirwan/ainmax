@@ -1025,20 +1025,32 @@ def argpartition(
 def cumulative_prod(
     array: NamedArrayLike, axis: AxisSelector, dtype: DTypeLike | None = None, include_initial: bool = False
 ) -> NamedArray:
-    """Cumulative sum along the axis of an array.
+    """Cumulative product along the axis of an array.
 
     Args:
-        x: Input array
-        axis: Axis along which to compute the cumulative sum.
+        array: Input array
+        axis: Axis along which to compute the cumulative product.
         dtype: Optional dtype of the output.
         include_initial: if True, then include the initial value in the cumulative product. Default is False.
 
     Returns:
         A ``NamedArray`` containing the accumulated values.
     """
-    return wrap_axiswise_call(jnp.cumulative_prod, single_axis_only=True)(
-        array, axis, dtype=dtype, include_initial=include_initial
-    )
+    named = util.ensure_named("cumulative_prod", array)
+    axis_tuple = axis_selection_to_tuple(axis)
+    indices = axis_indices(named.axes, axis_tuple)
+    if indices is None or len(indices) != 1 or indices[0] is None:
+        raise ValueError(f"cumulative_prod requires a single axis, got {axis}")
+
+    idx = indices[0]
+    result_array = jnp.cumulative_prod(named.array, axis=idx, dtype=dtype, include_initial=include_initial)
+
+    if include_initial:
+        out_axes = tuple(ax.resize(size=result_array.shape[i]) if i == idx else ax for i, ax in enumerate(named.axes))
+    else:
+        out_axes = named.axes
+
+    return constructors.array(result_array, out_axes)
 
 
 def cumulative_sum(
@@ -1050,15 +1062,26 @@ def cumulative_sum(
         array: Input array
         axis: Axis along which to compute the cumulative sum.
         dtype: Optional dtype of the output.
-        include_initial: if True, then include the initial value in the cumulative product. Default is False.
+        include_initial: if True, then include the initial value in the cumulative sum. Default is False.
 
     Returns:
         A ``NamedArray`` containing the accumulated values.
     """
+    named = util.ensure_named("cumulative_sum", array)
+    axis_tuple = axis_selection_to_tuple(axis)
+    indices = axis_indices(named.axes, axis_tuple)
+    if indices is None or len(indices) != 1 or indices[0] is None:
+        raise ValueError(f"cumulative_sum requires a single axis, got {axis}")
 
-    return wrap_axiswise_call(jnp.cumulative_sum, single_axis_only=True)(
-        array, axis, dtype=dtype, include_initial=include_initial
-    )
+    idx = indices[0]
+    result_array = jnp.cumulative_sum(named.array, axis=idx, dtype=dtype, include_initial=include_initial)
+
+    if include_initial:
+        out_axes = tuple(ax.resize(size=result_array.shape[i]) if i == idx else ax for i, ax in enumerate(named.axes))
+    else:
+        out_axes = named.axes
+
+    return constructors.array(result_array, out_axes)
 
 
 def count_nonzero(a: NamedArrayLike, axis: AxisSelection | None = None, keepdims: bool = False) -> NamedArray:
