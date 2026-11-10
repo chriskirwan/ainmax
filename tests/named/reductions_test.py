@@ -353,90 +353,90 @@ class TestSortingOps:
         assert jnp.array_equal(got.array, want)
 
 
-# class TestAverage:
-#     def test_unweighted_average_matches_mean(self):
-#         x = _make_named()
+class TestAverage:
+    def test_unweighted_average_matches_mean(self):
+        x = _make_named()
 
-#         got = reductions.average(x, axis="x")
-#         want = jnp.average(x.array, axis=1)
+        got = reductions.average(x, axis="x")
+        want = jnp.average(x.array, axis=1)
 
-#         assert [ax.name for ax in got.axes] == ["batch", "y"]
-#         np.testing.assert_allclose(got.array, want)
+        assert [ax.name for ax in got.axes] == ["batch", "y"]
+        np.testing.assert_allclose(got.array, want)
 
-#     def test_weighted_average_broadcasts_named_weights(self, x4):
-#         x = _make_named()
-#         weights = array(jnp.array([1.0, 2.0, 3.0, 4.0]), (x4,))
+    def test_weighted_average_broadcasts_named_weights(self, x4):
+        x = _make_named()
+        weights = array(jnp.array([1.0, 2.0, 3.0, 4.0]), (x4,))
 
-#         got = reductions.average(x, axis="x", weights=weights)
-#         want = jnp.average(x.array, axis=1, weights=jnp.broadcast_to(weights.array[None, :, None], x.shape))
+        got = reductions.average(x, axis="x", weights=weights)
+        want = jnp.average(x.array, axis=1, weights=jnp.broadcast_to(weights.array[None, :, None], x.shape))
 
-#         assert [ax.name for ax in got.axes] == ["batch", "y"]
-#         np.testing.assert_allclose(got.array, want)
+        assert [ax.name for ax in got.axes] == ["batch", "y"]
+        np.testing.assert_allclose(got.array, want)
 
-#     def test_returned_includes_sum_of_weights(self, x4):
-#         x = _make_named()
-#         weights = array(jnp.array([1.0, 2.0, 3.0, 4.0]), (x4,))
+    def test_returned_includes_sum_of_weights(self, x4):
+        x = _make_named()
+        weights = array(jnp.array([1.0, 2.0, 3.0, 4.0]), (x4,))
 
-#         got_average, got_weights = reductions.average(x, axis="x", weights=weights, returned=True)
-#         broadcast_weights = jnp.broadcast_to(weights.array[None, :, None], x.shape)
-#         want_average, want_weights = jnp.average(x.array, axis=1, weights=broadcast_weights, returned=True)
+        got_average, got_weights = reductions.average(x, axis="x", weights=weights, returned=True)
+        broadcast_weights = jnp.broadcast_to(weights.array[None, :, None], x.shape)
+        want_average, want_weights = jnp.average(x.array, axis=1, weights=broadcast_weights, returned=True)
 
-#         np.testing.assert_allclose(got_average.array, want_average)
-#         np.testing.assert_allclose(got_weights.array, want_weights)
-#         assert got_average.axes == got_weights.axes
+        np.testing.assert_allclose(got_average.array, want_average)
+        np.testing.assert_allclose(got_weights.array, want_weights)
+        assert got_average.axes == got_weights.axes
 
-#     def test_returned_without_explicit_weights(self):
-#         x = _make_named()
+    def test_returned_without_explicit_weights(self):
+        x = _make_named()
 
-#         got_average, got_weights = reductions.average(x, axis="x", returned=True)
-#         want_average, want_weights = jnp.average(x.array, axis=1, returned=True)
+        got_average, got_weights = reductions.average(x, axis="x", returned=True)
+        want_average, want_weights = jnp.average(x.array, axis=1, returned=True)
 
-#         np.testing.assert_allclose(got_average.array, want_average)
-#         np.testing.assert_allclose(got_weights.array, want_weights)
+        np.testing.assert_allclose(got_average.array, want_average)
+        np.testing.assert_allclose(got_weights.array, want_weights)
 
 
-# class TestMedianVariants:
-#     @pytest.mark.parametrize(
-#         ("name", "reference", "make_input"),
-#         [
-#             ("median", jnp.median, _make_named),
-#             ("nanmedian", jnp.nanmedian, _make_named_with_nan),
-#         ],
-#     )
-#     def test_matches_reference_and_preserves_axes(self, name, reference, make_input):
-#         x = make_input()
+class TestMedianVariants:
+    @pytest.mark.parametrize(
+        ("name", "reference", "make_input"),
+        [
+            ("median", jnp.median, _make_named),
+            ("nanmedian", jnp.nanmedian, _make_named_with_nan),
+        ],
+    )
+    def test_matches_reference_and_preserves_axes(self, name, reference, make_input):
+        x = make_input()
 
-#         got = getattr(reductions, name)(x, axis="x")
-#         want = reference(x.array, axis=1)
+        got = getattr(reductions, name)(x, axis="x")
+        want = reference(x.array, axis=1)
 
-#         assert [ax.name for ax in got.axes] == ["batch", "y"]
-#         np.testing.assert_allclose(got.array, want)
+        assert [ax.name for ax in got.axes] == ["batch", "y"]
+        np.testing.assert_allclose(got.array, want)
 
-#     def test_nanmean_matches_reference_with_nans(self):
-#         x = _make_named_with_nan()
+    def test_nanmean_matches_reference_with_nans(self):
+        x = _make_named_with_nan()
 
-#         got = reductions.nanmean(x, axis="x")
-#         want = jnp.nanmean(x.array, axis=1)
+        got = reductions.nanmean(x, axis="x")
+        want = jnp.nanmean(x.array, axis=1)
 
-#         assert [ax.name for ax in got.axes] == ["batch", "y"]
-#         np.testing.assert_allclose(got.array, want)
+        assert [ax.name for ax in got.axes] == ["batch", "y"]
+        np.testing.assert_allclose(got.array, want)
 
-#     @pytest.mark.parametrize(
-#         ("name", "reference"),
-#         [
-#             ("median", jnp.median),
-#             ("nanmedian", jnp.nanmedian),
-#         ],
-#     )
-#     def test_keepdims_preserves_reduced_axis(self, name, reference):
-#         x = _make_named_with_nan() if name == "nanmedian" else _make_named()
+    @pytest.mark.parametrize(
+        ("name", "reference"),
+        [
+            ("median", jnp.median),
+            ("nanmedian", jnp.nanmedian),
+        ],
+    )
+    def test_keepdims_preserves_reduced_axis(self, name, reference):
+        x = _make_named_with_nan() if name == "nanmedian" else _make_named()
 
-#         got = getattr(reductions, name)(x, axis="x", keepdims=True)
-#         want = reference(x.array, axis=1, keepdims=True)
+        got = getattr(reductions, name)(x, axis="x", keepdims=True)
+        want = reference(x.array, axis=1, keepdims=True)
 
-#         assert [ax.name for ax in got.axes] == ["batch", "x", "y"]
-#         assert [ax.size for ax in got.axes] == [3, 1, 5]
-#         np.testing.assert_allclose(got.array, want)
+        assert [ax.name for ax in got.axes] == ["batch", "x", "y"]
+        assert [ax.size for ax in got.axes] == [3, 1, 5]
+        np.testing.assert_allclose(got.array, want)
 
 
 class TestQuantileVariants:
