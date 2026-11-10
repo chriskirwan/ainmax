@@ -5,6 +5,8 @@ from typing import Literal, overload
 import equinox as eqx
 import jax.lax
 import jax.numpy as jnp
+from jax import Device
+from jax.sharding import Sharding
 from jax.typing import DTypeLike
 
 from lynqx._src.axis import Axis, AxisLike, AxisSelection, AxisSelector, AxisShape
@@ -30,61 +32,90 @@ def zeros(
     shape: AxisShape,
     dtype: DTypeLike | None = None,
     *,
+    device: Device | Sharding | None = None,
     out_sharding: ShardingLike | None = None,
 ) -> NamedArray:
     """Create an array full of zeros.
 
     Args:
-        shape: specify the shape of the created array.
-        dtype: optional dtype for the created array; defaults to float32 or float64 depending on the X64 configuration.
-        out_sharding: optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
+        shape: Specify the shape of the created array.
+        dtype: Optional dtype for the created array; defaults to float32 or float64 depending on the X64 configuration.
+        device: Optional :class:`~jax.Device` or :class:`~jax.sharding.Sharding` to which the created array will be
+            committed. This argument exists for compatibility with the :ref:`python-array-api`.
+        out_sharding: Optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
             sharding of the output array.
     Returns:
-        Named array of the specified shape and dtype, with the given sharding if specified.
+        A ``NamedArray`` of the specified shape and dtype, with the given sharding if specified.
     """
 
-    return full(shape, 0.0, dtype, out_sharding=out_sharding)
+    target = axis_shape_to_tuple(shape)
+    target_sizes = axis_sizes(target)
+
+    jax_sharding = canonicalize_sharding(target, out_sharding, "full")
+
+    jax_array = jnp.zeros(target_sizes, dtype=dtype, out_sharding=jax_sharding, device=device)
+
+    return constructors.array(jax_array, target)
 
 
 def ones(
     shape: AxisShape,
     dtype: DTypeLike | None = None,
     *,
+    device: Device | Sharding | None = None,
     out_sharding: ShardingLike | None = None,
 ) -> NamedArray:
     """Create an array full of ones.
 
     Args:
-        shape: specify the shape of the created array.
-        dtype: optional dtype for the created array; defaults to float32 or float64 depending on the X64 configuration.
-        out_sharding: optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
+        shape: Specify the shape of the created array.
+        dtype: Optional dtype for the created array; defaults to float32 or float64 depending on the X64 configuration.
+        device: Optional :class:`~jax.Device` or :class:`~jax.sharding.Sharding` to which the created array will be
+            committed. This argument exists for compatibility with the :ref:`python-array-api`.
+        out_sharding: Optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
             sharding of the output array.
-
     Returns:
-        A ``NamedArray`` of the specified shape and dtype, with the given device/sharding if specified.
+        A ``NamedArray`` of the specified shape and dtype, with the given sharding if specified.
     """
 
-    return full(shape, 1.0, dtype, out_sharding=out_sharding)
+    target = axis_shape_to_tuple(shape)
+    target_sizes = axis_sizes(target)
+
+    jax_sharding = canonicalize_sharding(target, out_sharding, "full")
+
+    jax_array = jnp.ones(target_sizes, dtype=dtype, device=device, out_sharding=jax_sharding)
+
+    return constructors.array(jax_array, target)
 
 
 def empty(
     shape: AxisShape,
     dtype: DTypeLike | None = None,
     *,
+    device: Device | Sharding | None = None,
     out_sharding: ShardingLike | None = None,
 ) -> NamedArray:
     """Create an empty array.
 
     Args:
-        shape: specify the shape of the created array.
-        dtype: optional dtype for the created array; defaults to float32 or float64 depending on the X64 configuration.
-        out_sharding: optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
+        shape: Specify the shape of the created array.
+        dtype: Optional dtype for the created array; defaults to float32 or float64 depending on the X64 configuration.
+        device: Optional :class:`~jax.Device` or :class:`~jax.sharding.Sharding` to which the created array will be
+            committed. This argument exists for compatibility with the :ref:`python-array-api`.
+        out_sharding: Optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
             sharding of the output array.
     Returns:
-        A ``NamedArray`` of the specified shape and dtype, with the given device/sharding if specified.
+        A ``NamedArray`` of the specified shape and dtype, with the given sharding if specified.
     """
 
-    return full(shape, 0.0, dtype, out_sharding=out_sharding)
+    target = axis_shape_to_tuple(shape)
+    target_sizes = axis_sizes(target)
+
+    jax_sharding = canonicalize_sharding(target, out_sharding, "full")
+
+    jax_array = jnp.empty(target_sizes, dtype=dtype, device=device, out_sharding=jax_sharding)
+
+    return constructors.array(jax_array, target)
 
 
 def full(
@@ -92,15 +123,18 @@ def full(
     fill_value: NamedArrayLike,
     dtype: DTypeLike | None = None,
     *,
+    device: Device | Sharding | None = None,
     out_sharding: ShardingLike | None = None,
 ) -> NamedArray:
     """Create an array filled with a specified value.
 
     Args:
-        shape: specify the shape of the created array.
-        fill_value: scalar or array with which to fill the created array.
-        dtype: optional dtype for the created array; defaults to float32 or float64 depending on the X64 configuration.
-        out_sharding: optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
+        shape: Specify the shape of the created array.
+        fill_value: Scalar or array with which to fill the created array.
+        dtype: Optional dtype for the created array; defaults to float32 or float64 depending on the X64 configuration.
+        device: Optional :class:`~jax.Device` or :class:`~jax.sharding.Sharding` to which the created array will be
+                    committed. This argument exists for compatibility with the :ref:`python-array-api`.
+        out_sharding: Optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
             sharding of the output array.
 
     Returns:
@@ -119,6 +153,7 @@ def full(
         target_sizes,
         fill_value,
         dtype=dtype,
+        device=device,
         out_sharding=jax_sharding,
     )
 
@@ -126,10 +161,11 @@ def full(
 
 
 def zeros_like(
-    a: NamedArrayLike | DuckTypedNamedArray,
+    prototype: NamedArrayLike | DuckTypedNamedArray,
     dtype: DTypeLike | None = None,
     shape: AxisShape | None = None,
     *,
+    device: Device | Sharding | None = None,
     out_sharding: ShardingLike | None = None,
 ) -> NamedArray:
     """Create an array full of zeros with the same shape and dtype as an array.
@@ -138,21 +174,30 @@ def zeros_like(
         a: NamedArray-like object with ``shape`` and ``dtype`` attributes.
         shape: Optionally override the shape of the created array.
         dtype: Optionally override the dtype of the created array.
+        device: Optional :class:`~jax.Device` or :class:`~jax.sharding.Sharding` to which the created array will be
+                    committed. This argument exists for compatibility with the :ref:`python-array-api`.
         out_sharding: Optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
             sharding of the output array.
 
     Returns:
         A ``NamedArray`` of the specified shape and dtype, on the specified device if specified.
     """
+    prototype = util.ensure_named("full_like", prototype)
+    dtype = prototype.dtype if dtype is None else dtype
+    target_shape = axis_shape_to_tuple(prototype.axes if shape is None else shape)
 
-    return full_like(a, 0.0, shape=shape, dtype=dtype, out_sharding=out_sharding)
+    jax_sharding = canonicalize_sharding(target_shape, out_sharding, "zeros_like")
+    jax_array = jnp.zeros_like(prototype, dtype=dtype, device=device, out_sharding=jax_sharding)
+
+    return constructors.array(jax_array, target_shape)
 
 
 def ones_like(
-    a: NamedArrayLike | DuckTypedNamedArray,
+    prototype: NamedArrayLike | DuckTypedNamedArray,
     dtype: DTypeLike | None = None,
     shape: AxisShape | None = None,
     *,
+    device: Device | Sharding | None = None,
     out_sharding: ShardingLike | None = None,
 ) -> NamedArray:
     """Create an array full of ones with the same shape and dtype as an array.
@@ -161,20 +206,30 @@ def ones_like(
         a: NamedArray-like object with ``shape`` and ``dtype`` attributes.
         shape: Optionally override the shape of the created array.
         dtype: Optionally override the dtype of the created array.
+        device: Optional :class:`~jax.Device` or :class:`~jax.sharding.Sharding` to which the created array will be
+                    committed. This argument exists for compatibility with the :ref:`python-array-api`.
         out_sharding: Optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
             sharding of the output array.
 
     Returns:
         A ``NamedArray`` of the specified shape and dtype, on the specified device if specified.
     """
-    return full_like(a, 1.0, shape=shape, dtype=dtype, out_sharding=out_sharding)
+    prototype = util.ensure_named("full_like", prototype)
+    dtype = prototype.dtype if dtype is None else dtype
+    target_shape = axis_shape_to_tuple(prototype.axes if shape is None else shape)
+
+    jax_sharding = canonicalize_sharding(target_shape, out_sharding, "zeros_like")
+    jax_array = jnp.ones_like(prototype, dtype=dtype, device=device, out_sharding=jax_sharding)
+
+    return constructors.array(jax_array, target_shape)
 
 
 def empty_like(
-    a: NamedArrayLike | DuckTypedNamedArray,
+    prototype: NamedArrayLike | DuckTypedNamedArray,
     dtype: DTypeLike | None = None,
     shape: AxisShape | None = None,
     *,
+    device: Device | Sharding | None = None,
     out_sharding: ShardingLike | None = None,
 ) -> NamedArray:
     """Create an empty array with the same shape and dtype as an array.
@@ -183,22 +238,33 @@ def empty_like(
         a: NamedArray-like object with ``shape`` and ``dtype`` attributes.
         shape: Optionally override the shape of the created array.
         dtype: Optionally override the dtype of the created array.
+        device: Optional :class:`~jax.Device` or :class:`~jax.sharding.Sharding` to which the created array will be
+                    committed. This argument exists for compatibility with the :ref:`python-array-api`.
         out_sharding: Optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
             sharding of the output array.
 
     Returns:
         A ``NamedArray`` of the specified shape and dtype, on the specified device if specified.
     """
+    if device is not None and out_sharding is not None:
+        raise ValueError(f"Only one of `device` or `out_sharding` can be set. Got {device} and {out_sharding}")
 
-    return full_like(a, 0.0, shape=shape, dtype=dtype, out_sharding=out_sharding)
+    prototype = util.ensure_named("full_like", prototype)
+    dtype = prototype.dtype if dtype is None else dtype
+    target_shape = axis_shape_to_tuple(prototype.axes if shape is None else shape)
+
+    jax_array = jnp.empty_like(prototype, dtype=dtype, device=device)
+
+    return constructors.array(jax_array, target_shape, out_sharding=out_sharding)
 
 
 def full_like(
-    a: NamedArrayLike | DuckTypedNamedArray,
+    prototype: NamedArrayLike | DuckTypedNamedArray,
     fill_value: NamedArrayLike,
     dtype: DTypeLike | None = None,
     shape: AxisShape | None = None,
     *,
+    device: Device | Sharding | None = None,
     out_sharding: ShardingLike | None = None,
 ) -> NamedArray:
     """Create an array full of ones with the same shape and dtype as an array.
@@ -208,6 +274,8 @@ def full_like(
         fill_value: Scalar or array with which to fill the created array.
         shape: Optionally override the shape of the created array.
         dtype: Optionally override the dtype of the created array.
+        device: Optional :class:`~jax.Device` or :class:`~jax.sharding.Sharding` to which the created array will be
+                    committed. This argument exists for compatibility with the :ref:`python-array-api`.
         out_sharding: Optional :class:`~lynqx.PM`, :class:`~jax.P` or :class:`~jax.NamedSharding` specifying the
             sharding of the output array.
 
@@ -215,11 +283,14 @@ def full_like(
         A ``NamedArray`` of the specified shape and dtype, on the specified device if specified.
     """
 
-    named, fill_named = util.ensure_named("full_like", a, fill_value)
-    dtype = named.dtype if dtype is None else dtype
-    fill_shape = named.axes if shape is None else shape
+    prototype, fill_named = util.ensure_named("full_like", prototype, fill_value)
+    dtype = prototype.dtype if dtype is None else dtype
+    target_shape = axis_shape_to_tuple(prototype.axes if shape is None else shape)
 
-    return full(fill_shape, fill_value, dtype, out_sharding=out_sharding)
+    jax_sharding = canonicalize_sharding(target_shape, out_sharding, "zeros_like")
+    jax_array = jnp.zeros_like(prototype, dtype=dtype, device=device, out_sharding=jax_sharding)
+
+    return constructors.array(jax_array, target_shape)
 
 
 def iota(
@@ -266,6 +337,7 @@ def iota(
     return constructors.array(jax_array, shape)
 
 
+# TODO: add `device` argument when `jnp.arange` support both kwargs
 def arange(
     axis: Axis,
     start: NamedArrayLike | None = None,
@@ -436,6 +508,7 @@ def linspace(
 ) -> NamedArray | tuple[NamedArray, NamedArray]: ...
 
 
+# TODO: add `device` argument when `linspce` support both kwargs
 def linspace(
     start: NamedArrayLike,
     stop: NamedArrayLike,
@@ -468,9 +541,9 @@ def linspace(
     if isinstance(axis, str):
         axis = Axis(50, axis)  # numpy default
 
-    from lynqx._src.named import operations
+    from lynqx._src.named.operations import broadcast_arrays_and_shape
 
-    (start, stop), common_axes = operations.broadcast_arrays_and_shape(start, stop)
+    (start, stop), common_axes = broadcast_arrays_and_shape(start, stop)
     if axis.name in axis_names(common_axes):
         raise ValueError(f"Axis {axis} already exists in one of the input arrays.")
 
@@ -480,13 +553,14 @@ def linspace(
     step = None
     if retstep:
         jax_array, jax_array_step = jax_array
-        step = constructors.array(jax_array_step, common_axes)
+        step = constructors.array(jax_array_step, common_axes, out_sharding=out_sharding)
 
     result = constructors.array(jax_array, out_axes, out_sharding=out_sharding)
 
     return (result, step) if step is not None else result
 
 
+# TODO: add `device` argument when `jnp.logspce` support both kwargs
 def logspace(
     start: NamedArrayLike,
     stop: NamedArrayLike,
@@ -527,6 +601,7 @@ def logspace(
     return constructors.array(jax_array, out_axes, out_sharding=out_sharding)
 
 
+# TODO: add `device` argument when `jnp.geomspace` support both kwargs
 def geomspace(
     start: NamedArrayLike,
     stop: NamedArrayLike,
@@ -550,7 +625,6 @@ def geomspace(
     Returns:
         A ``NamedArray`` of samples on a geometric progression.
     """
-
     if isinstance(axis, str):
         axis = Axis(50, axis)  # numpy default
 
@@ -603,9 +677,9 @@ def delta(
 
     new_dtype = jnp.float32 if dtype is None else dtype
     casted_result = eqx.tree_at(lambda m: m.array, result, replace_fn=lambda x: jnp.astype(x, new_dtype))
-    from lynqx._src.named import operations
+    from lynqx._src.named.operations import broadcast_to
 
-    return operations.broadcast_to(casted_result, shape, out_sharding=out_sharding)
+    return broadcast_to(casted_result, shape, out_sharding=out_sharding)
 
 
 def identity(
@@ -626,7 +700,6 @@ def identity(
     Returns:
         A ``NamedArray`` with the given shape whose two selected axes form an identity matrix.
     """
-
     resolved = axis_shape_to_tuple(shape)
     indices = axis_indices(resolved, axes)
 
