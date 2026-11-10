@@ -306,7 +306,10 @@ class TestCumulativeOps:
         got = lynqx_fn(x, axis="x", include_initial=True)
         want = ref_fn(x.array, axis=1, include_initial=True)
 
-        assert got.axes == x.axes
+        idx = 1
+        expected_axes = tuple(ax.resize(size=want.shape[i]) if i == idx else ax for i, ax in enumerate(x.axes))
+        assert got.axes == expected_axes
+
         np.testing.assert_allclose(got.array, want)
 
 
