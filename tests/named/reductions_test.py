@@ -74,6 +74,8 @@ REDUCTION_RECORDS = [
     ReductionRecord("nanstd"),
     ReductionRecord("nansum"),
     ReductionRecord("nanvar"),
+    ReductionRecord("count_nonzero"),
+    ReductionRecord("minmax", supports_initial=True),
 ]
 
 # `argmin`/`argmax`/`nanargmin`/`nanargmax` only accept a single axis (or
@@ -90,7 +92,7 @@ ALL_RECORDS = REDUCTION_RECORDS + ARG_RECORDS
 
 NAN_FUNCS = ["nansum", "nanprod", "nanstd", "nanvar", "nanmax", "nanmin", "nanargmax", "nanargmin"]
 
-AXISWISE_RECORDS = ["cumsum", "cumprod", "nancumsum", "nancumprod"]
+AXISWISE_RECORDS = ["cumsum", "cumprod", "nancumsum", "nancumprod", "cumulative_prod", "cumulative_sum"]
 
 
 class TestReductionsMatchReference:
@@ -103,8 +105,13 @@ class TestReductionsMatchReference:
         got = lynqx_fn(x, axis=None)
         want = ref_fn(x.array, axis=None)
 
-        assert got.axes == ()
-        np.testing.assert_allclose(got.array, want)
+        if isinstance(got, tuple):
+            for g, w in zip(got, want):
+                assert g.axes == ()
+                np.testing.assert_allclose(g.array, w)
+        else:
+            assert got.axes == ()
+            np.testing.assert_allclose(got.array, want)
 
     @pytest.mark.parametrize("record", [r for r in ALL_RECORDS], ids=lambda r: r.name)
     def test_single_named_axis_reduction(self, record):
@@ -115,8 +122,14 @@ class TestReductionsMatchReference:
         got = lynqx_fn(x, axis="x")
         want = ref_fn(x.array, axis=1)
 
-        assert [ax.name for ax in got.axes] == ["batch", "y"]
-        np.testing.assert_allclose(got.array, want)
+        if isinstance(got, tuple):
+            for g in got:
+                assert [ax.name for ax in g.axes] == ["batch", "y"]
+            for g, w in zip(got, want):
+                np.testing.assert_allclose(g.array, w)
+        else:
+            assert [ax.name for ax in got.axes] == ["batch", "y"]
+            np.testing.assert_allclose(got.array, want)
 
     @pytest.mark.parametrize("record", [r for r in REDUCTION_RECORDS if r.supports_multi_axis], ids=lambda r: r.name)
     def test_multi_axis_reduction_by_name(self, record):
@@ -127,8 +140,14 @@ class TestReductionsMatchReference:
         got = lynqx_fn(x, axis=["batch", "y"])
         want = ref_fn(x.array, axis=(0, 2))
 
-        assert [ax.name for ax in got.axes] == ["x"]
-        np.testing.assert_allclose(got.array, want)
+        if isinstance(got, tuple):
+            for g in got:
+                assert [ax.name for ax in g.axes] == ["x"]
+            for g, w in zip(got, want):
+                np.testing.assert_allclose(g.array, w)
+        else:
+            assert [ax.name for ax in got.axes] == ["x"]
+            np.testing.assert_allclose(got.array, want)
 
     @pytest.mark.parametrize("record", [r for r in ALL_RECORDS], ids=lambda r: r.name)
     def test_keepdims_resizes_reduced_axis_to_one(self, record):
@@ -137,8 +156,13 @@ class TestReductionsMatchReference:
 
         got = lynqx_fn(x, axis="x", keepdims=True)
 
-        assert [ax.name for ax in got.axes] == ["batch", "x", "y"]
-        assert [ax.size for ax in got.axes] == [3, 1, 5]
+        if isinstance(got, tuple):
+            for g in got:
+                assert [ax.name for ax in g.axes] == ["batch", "x", "y"]
+                assert [ax.size for ax in g.axes] == [3, 1, 5]
+        else:
+            assert [ax.name for ax in got.axes] == ["batch", "x", "y"]
+            assert [ax.size for ax in got.axes] == [3, 1, 5]
 
     @pytest.mark.parametrize("record", ALL_RECORDS, ids=lambda r: r.name)
     def test_keepdims_with_full_reduction(self, record):
@@ -147,8 +171,13 @@ class TestReductionsMatchReference:
 
         got = lynqx_fn(x, axis=None, keepdims=True)
 
-        assert [ax.size for ax in got.axes] == [1, 1, 1]
-        assert [ax.name for ax in got.axes] == ["batch", "x", "y"]
+        if isinstance(got, tuple):
+            for g in got:
+                assert [ax.size for ax in g.axes] == [1, 1, 1]
+                assert [ax.name for ax in got[0].axes] == ["batch", "x", "y"]
+        else:
+            assert [ax.size for ax in got.axes] == [1, 1, 1]
+            assert [ax.name for ax in got.axes] == ["batch", "x", "y"]
 
 
 class TestNanVariantsIgnoreNaNs:
@@ -268,6 +297,21 @@ class TestCumulativeOps:
         with pytest.raises(ValueError, match="could not be resolved"):
             lynqx_fn(x, axis="nope")
 
+    @pytest.mark.parametrize("name", ["cumulative_prod", "cumulative_sum"])
+    def test_cumulative_include_initial(self, name):
+        lynqx_fn = getattr(reductions, name)
+        ref_fn = getattr(jnp, name)
+        x = _make_named()
+
+        got = lynqx_fn(x, axis="x", include_initial=True)
+        want = ref_fn(x.array, axis=1, include_initial=True)
+
+        idx = 1
+        expected_axes = tuple(ax.resize(size=want.shape[i]) if i == idx else ax for i, ax in enumerate(x.axes))
+        assert got.axes == expected_axes
+
+        np.testing.assert_allclose(got.array, want)
+
 
 class TestSortingOps:
     def test_sort_matches_reference_and_preserves_axes(self):
@@ -312,90 +356,90 @@ class TestSortingOps:
         assert jnp.array_equal(got.array, want)
 
 
-# class TestAverage:
-#     def test_unweighted_average_matches_mean(self):
-#         x = _make_named()
+class TestAverage:
+    def test_unweighted_average_matches_mean(self):
+        x = _make_named()
 
-#         got = reductions.average(x, axis="x")
-#         want = jnp.average(x.array, axis=1)
+        got = reductions.average(x, axis="x")
+        want = jnp.average(x.array, axis=1)
 
-#         assert [ax.name for ax in got.axes] == ["batch", "y"]
-#         np.testing.assert_allclose(got.array, want)
+        assert [ax.name for ax in got.axes] == ["batch", "y"]
+        np.testing.assert_allclose(got.array, want)
 
-#     def test_weighted_average_broadcasts_named_weights(self, x4):
-#         x = _make_named()
-#         weights = array(jnp.array([1.0, 2.0, 3.0, 4.0]), (x4,))
+    def test_weighted_average_broadcasts_named_weights(self, x4):
+        x = _make_named()
+        weights = array(jnp.array([1.0, 2.0, 3.0, 4.0]), (x4,))
 
-#         got = reductions.average(x, axis="x", weights=weights)
-#         want = jnp.average(x.array, axis=1, weights=jnp.broadcast_to(weights.array[None, :, None], x.shape))
+        got = reductions.average(x, axis="x", weights=weights)
+        want = jnp.average(x.array, axis=1, weights=jnp.broadcast_to(weights.array[None, :, None], x.shape))
 
-#         assert [ax.name for ax in got.axes] == ["batch", "y"]
-#         np.testing.assert_allclose(got.array, want)
+        assert [ax.name for ax in got.axes] == ["batch", "y"]
+        np.testing.assert_allclose(got.array, want)
 
-#     def test_returned_includes_sum_of_weights(self, x4):
-#         x = _make_named()
-#         weights = array(jnp.array([1.0, 2.0, 3.0, 4.0]), (x4,))
+    def test_returned_includes_sum_of_weights(self, x4):
+        x = _make_named()
+        weights = array(jnp.array([1.0, 2.0, 3.0, 4.0]), (x4,))
 
-#         got_average, got_weights = reductions.average(x, axis="x", weights=weights, returned=True)
-#         broadcast_weights = jnp.broadcast_to(weights.array[None, :, None], x.shape)
-#         want_average, want_weights = jnp.average(x.array, axis=1, weights=broadcast_weights, returned=True)
+        got_average, got_weights = reductions.average(x, axis="x", weights=weights, returned=True)
+        broadcast_weights = jnp.broadcast_to(weights.array[None, :, None], x.shape)
+        want_average, want_weights = jnp.average(x.array, axis=1, weights=broadcast_weights, returned=True)
 
-#         np.testing.assert_allclose(got_average.array, want_average)
-#         np.testing.assert_allclose(got_weights.array, want_weights)
-#         assert got_average.axes == got_weights.axes
+        np.testing.assert_allclose(got_average.array, want_average)
+        np.testing.assert_allclose(got_weights.array, want_weights)
+        assert got_average.axes == got_weights.axes
 
-#     def test_returned_without_explicit_weights(self):
-#         x = _make_named()
+    def test_returned_without_explicit_weights(self):
+        x = _make_named()
 
-#         got_average, got_weights = reductions.average(x, axis="x", returned=True)
-#         want_average, want_weights = jnp.average(x.array, axis=1, returned=True)
+        got_average, got_weights = reductions.average(x, axis="x", returned=True)
+        want_average, want_weights = jnp.average(x.array, axis=1, returned=True)
 
-#         np.testing.assert_allclose(got_average.array, want_average)
-#         np.testing.assert_allclose(got_weights.array, want_weights)
+        np.testing.assert_allclose(got_average.array, want_average)
+        np.testing.assert_allclose(got_weights.array, want_weights)
 
 
-# class TestMedianVariants:
-#     @pytest.mark.parametrize(
-#         ("name", "reference", "make_input"),
-#         [
-#             ("median", jnp.median, _make_named),
-#             ("nanmedian", jnp.nanmedian, _make_named_with_nan),
-#         ],
-#     )
-#     def test_matches_reference_and_preserves_axes(self, name, reference, make_input):
-#         x = make_input()
+class TestMedianVariants:
+    @pytest.mark.parametrize(
+        ("name", "reference", "make_input"),
+        [
+            ("median", jnp.median, _make_named),
+            ("nanmedian", jnp.nanmedian, _make_named_with_nan),
+        ],
+    )
+    def test_matches_reference_and_preserves_axes(self, name, reference, make_input):
+        x = make_input()
 
-#         got = getattr(reductions, name)(x, axis="x")
-#         want = reference(x.array, axis=1)
+        got = getattr(reductions, name)(x, axis="x")
+        want = reference(x.array, axis=1)
 
-#         assert [ax.name for ax in got.axes] == ["batch", "y"]
-#         np.testing.assert_allclose(got.array, want)
+        assert [ax.name for ax in got.axes] == ["batch", "y"]
+        np.testing.assert_allclose(got.array, want)
 
-#     def test_nanmean_matches_reference_with_nans(self):
-#         x = _make_named_with_nan()
+    def test_nanmean_matches_reference_with_nans(self):
+        x = _make_named_with_nan()
 
-#         got = reductions.nanmean(x, axis="x")
-#         want = jnp.nanmean(x.array, axis=1)
+        got = reductions.nanmean(x, axis="x")
+        want = jnp.nanmean(x.array, axis=1)
 
-#         assert [ax.name for ax in got.axes] == ["batch", "y"]
-#         np.testing.assert_allclose(got.array, want)
+        assert [ax.name for ax in got.axes] == ["batch", "y"]
+        np.testing.assert_allclose(got.array, want)
 
-#     @pytest.mark.parametrize(
-#         ("name", "reference"),
-#         [
-#             ("median", jnp.median),
-#             ("nanmedian", jnp.nanmedian),
-#         ],
-#     )
-#     def test_keepdims_preserves_reduced_axis(self, name, reference):
-#         x = _make_named_with_nan() if name == "nanmedian" else _make_named()
+    @pytest.mark.parametrize(
+        ("name", "reference"),
+        [
+            ("median", jnp.median),
+            ("nanmedian", jnp.nanmedian),
+        ],
+    )
+    def test_keepdims_preserves_reduced_axis(self, name, reference):
+        x = _make_named_with_nan() if name == "nanmedian" else _make_named()
 
-#         got = getattr(reductions, name)(x, axis="x", keepdims=True)
-#         want = reference(x.array, axis=1, keepdims=True)
+        got = getattr(reductions, name)(x, axis="x", keepdims=True)
+        want = reference(x.array, axis=1, keepdims=True)
 
-#         assert [ax.name for ax in got.axes] == ["batch", "x", "y"]
-#         assert [ax.size for ax in got.axes] == [3, 1, 5]
-#         np.testing.assert_allclose(got.array, want)
+        assert [ax.name for ax in got.axes] == ["batch", "x", "y"]
+        assert [ax.size for ax in got.axes] == [3, 1, 5]
+        np.testing.assert_allclose(got.array, want)
 
 
 class TestQuantileVariants:

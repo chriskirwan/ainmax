@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from hypothesis import given, strategies as st
+from jax.sharding import SingleDeviceSharding
 from lynqx._src.axis import Axis
 from lynqx._src.named.constructors import array
 from lynqx._src.named.creation import (
@@ -220,6 +221,120 @@ class TestOutSharding:
         with jax.set_mesh(mesh_1d):
             got = zeros({"batch": 8}, out_sharding=pm)
         assert got.axes == (Axis(8, "batch"),)
+
+
+# ``device`` kwarg (jax / Array API compatibility)
+
+_X = Axis(4, "x")
+_Y = Axis(8, "y")
+_T = Axis(5, "t")
+
+
+def _proto():
+    return array(jnp.arange(32.0).reshape(4, 8), (_X, _Y))
+
+
+# (factory(device) -> NamedArray, expected fill value; ``None`` where the contents are unspecified)
+FILLED_FACTORIES = [
+    pytest.param(lambda d: zeros((_X, _Y), device=d), 0.0, id="zeros"),
+    pytest.param(lambda d: ones((_X, _Y), device=d), 1.0, id="ones"),
+    pytest.param(lambda d: empty((_X, _Y), device=d), None, id="empty"),
+    pytest.param(lambda d: full((_X, _Y), 3.0, device=d), 3.0, id="full"),
+    pytest.param(lambda d: zeros_like(_proto(), device=d), 0.0, id="zeros_like"),
+    pytest.param(lambda d: ones_like(_proto(), device=d), 1.0, id="ones_like"),
+    pytest.param(lambda d: empty_like(_proto(), device=d), None, id="empty_like"),
+    pytest.param(lambda d: full_like(_proto(), 3.0, device=d), 3.0, id="full_like"),
+]
+
+
+PLACEMENT_FACTORIES = [pytest.param(p.values[0], id=p.id) for p in FILLED_FACTORIES]
+
+# Constructors that accept both ``dtype`` and ``device``.
+DTYPE_FACTORIES = [
+    pytest.param(lambda d: zeros(_X, jnp.int32, device=d), id="zeros"),
+    pytest.param(lambda d: ones(_X, jnp.int32, device=d), id="ones"),
+    pytest.param(lambda d: empty(_X, jnp.int32, device=d), id="empty"),
+    pytest.param(lambda d: full(_X, 2, jnp.int32, device=d), id="full"),
+]
+
+needs_two_devices = pytest.mark.skipif(len(jax.devices()) < 2, reason="requires at least two devices")
+
+
+class TestDeviceKwarg:
+    @pytest.mark.parametrize("factory", PLACEMENT_FACTORIES)
+    def test_result_is_committed_to_the_requested_device(self, factory):
+        device = jax.devices()[0]
+        assert factory(device).array.devices() == {device}
+
+    @pytest.mark.parametrize("factory", PLACEMENT_FACTORIES)
+    def test_accepts_a_single_device_sharding(self, factory):
+        device = jax.devices()[0]
+        assert factory(SingleDeviceSharding(device)).array.devices() == {device}
+
+    @pytest.mark.parametrize("factory", PLACEMENT_FACTORIES)
+    def test_none_places_on_the_default_device(self, factory):
+        assert factory(None).array.devices() == jnp.zeros(()).devices()
+
+    @pytest.mark.parametrize("factory", PLACEMENT_FACTORIES)
+    def test_device_does_not_change_axes_or_dtype(self, factory):
+        got, default = factory(jax.devices()[0]), factory(None)
+        assert got.axes == default.axes
+        assert got.array.shape == default.array.shape
+        assert got.array.dtype == default.array.dtype
+
+    @pytest.mark.parametrize("factory,fill", FILLED_FACTORIES)
+    def test_fill_values_are_unchanged_by_device(self, factory, fill):
+        if fill is None:
+            pytest.skip("contents of an uninitialised array are unspecified")
+        got = factory(jax.devices()[0])
+        np.testing.assert_array_equal(got.array, np.full((4, 8), fill))
+
+    @pytest.mark.parametrize("factory", DTYPE_FACTORIES)
+    def test_device_combines_with_dtype(self, factory):
+        device = jax.devices()[0]
+        got = factory(device)
+        assert got.array.dtype == jnp.int32
+        assert got.array.devices() == {device}
+
+    @pytest.mark.parametrize("fn", [zeros_like, ones_like, empty_like])
+    def test_like_functions_combine_device_with_shape_override(self, fn):
+        device = jax.devices()[0]
+        got = fn(_proto(), shape=(Axis(16, "z"),), device=device)
+        assert got.axes == (Axis(16, "z"),)
+        assert got.array.devices() == {device}
+
+
+class TestDeviceAndOutShardingAreExclusive:
+    """Mirrors ``jax.numpy``: passing both ``device`` and ``out_sharding`` is an error."""
+
+    EXCLUSIVE_FACTORIES = [
+        pytest.param(lambda **kw: zeros({"batch": 8}, **kw), id="zeros"),
+        pytest.param(lambda **kw: ones({"batch": 8}, **kw), id="ones"),
+        pytest.param(lambda **kw: empty({"batch": 8}, **kw), id="empty"),
+        pytest.param(lambda **kw: full({"batch": 8}, 1.0, **kw), id="full"),
+    ]
+
+    @pytest.mark.parametrize("factory", EXCLUSIVE_FACTORIES)
+    def test_both_set_raises(self, factory, mesh_1d):
+        with jax.set_mesh(mesh_1d):
+            with pytest.raises(ValueError, match="device"):
+                factory(device=jax.devices()[0], out_sharding=PM({"batch": "x"}))
+
+
+@needs_two_devices
+class TestNonDefaultDevice:
+    """Only meaningful with several devices, e.g. ``XLA_FLAGS=--xla_force_host_platform_device_count=2``."""
+
+    @pytest.mark.parametrize("factory", PLACEMENT_FACTORIES)
+    def test_result_lands_on_a_non_default_device(self, factory):
+        device = jax.devices()[-1]
+        assert factory(device).array.devices() == {device}
+
+    @pytest.mark.parametrize("factory", PLACEMENT_FACTORIES)
+    def test_none_respects_the_default_device_context(self, factory):
+        device = jax.devices()[-1]
+        with jax.default_device(device):
+            assert factory(None).array.devices() == {device}
 
 
 # Creation operations moved from operations.py
