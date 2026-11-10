@@ -187,7 +187,9 @@ def zeros_like(
     target_shape = axis_shape_to_tuple(prototype.axes if shape is None else shape)
 
     jax_sharding = canonicalize_sharding(target_shape, out_sharding, "zeros_like")
-    jax_array = jnp.zeros_like(prototype, dtype=dtype, device=device, out_sharding=jax_sharding)
+    jax_array = jnp.zeros_like(
+        prototype, shape=axis_sizes(target_shape), dtype=dtype, device=device, out_sharding=jax_sharding
+    )
 
     return constructors.array(jax_array, target_shape)
 
@@ -219,7 +221,9 @@ def ones_like(
     target_shape = axis_shape_to_tuple(prototype.axes if shape is None else shape)
 
     jax_sharding = canonicalize_sharding(target_shape, out_sharding, "zeros_like")
-    jax_array = jnp.ones_like(prototype, dtype=dtype, device=device, out_sharding=jax_sharding)
+    jax_array = jnp.ones_like(
+        prototype, shape=axis_sizes(target_shape), dtype=dtype, device=device, out_sharding=jax_sharding
+    )
 
     return constructors.array(jax_array, target_shape)
 
@@ -253,7 +257,7 @@ def empty_like(
     dtype = prototype.dtype if dtype is None else dtype
     target_shape = axis_shape_to_tuple(prototype.axes if shape is None else shape)
 
-    jax_array = jnp.empty_like(prototype, dtype=dtype, device=device)
+    jax_array = jnp.empty_like(prototype, shape=axis_sizes(target_shape), dtype=dtype, device=device)
 
     return constructors.array(jax_array, target_shape, out_sharding=out_sharding)
 
@@ -288,7 +292,14 @@ def full_like(
     target_shape = axis_shape_to_tuple(prototype.axes if shape is None else shape)
 
     jax_sharding = canonicalize_sharding(target_shape, out_sharding, "zeros_like")
-    jax_array = jnp.zeros_like(prototype, dtype=dtype, device=device, out_sharding=jax_sharding)
+    jax_array = jnp.full_like(
+        prototype,
+        fill_named.array,
+        shape=axis_sizes(target_shape),
+        dtype=dtype,
+        device=device,
+        out_sharding=jax_sharding,
+    )
 
     return constructors.array(jax_array, target_shape)
 
