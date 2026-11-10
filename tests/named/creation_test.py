@@ -415,13 +415,6 @@ class TestIdentity:
         np.testing.assert_array_equal(identity({"x": n, "y": n}).array, jnp.eye(n))
 
 
-def known_bug(reason):
-    return pytest.mark.xfail(strict=True, reason=reason, raises=(ValueError, AssertionError))
-
-
-_TRI_ROLE_BUG = known_bug("Swapping triangle axis roles does not swap the selected triangle")
-
-
 class TestTriuTrilTri:
     @pytest.mark.parametrize("k", [-1, 0, 1])
     def test_triu_matches_jnp(self, square, k):
@@ -436,7 +429,6 @@ class TestTriuTrilTri:
         res = tri({"x": 3, "w": 3}, ("x", "w"), k=k)
         np.testing.assert_array_equal(res.array, jnp.tri(3, 3, k))
 
-    @_TRI_ROLE_BUG
     def test_swapping_axis_roles_turns_triu_into_tril(self, square):
         np.testing.assert_array_equal(triu(square, "w", "x").array, tril(square, "x", "w").array)
 
