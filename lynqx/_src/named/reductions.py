@@ -128,6 +128,8 @@ def _reduce_one_leaf(
         else:
             out_axes = ()
 
+        if isinstance(result, tuple):
+            return tuple(constructors.array(r, out_axes) for r in result)
         return constructors.array(result, out_axes)
     else:
         axis_tuple = axis_selection_to_tuple(axis)
@@ -150,6 +152,9 @@ def _reduce_one_leaf(
             result = fn(a.array, axis=indices[0], **kwargs)
         else:
             result = fn(a.array, axis=indices, **kwargs)
+
+        if isinstance(result, tuple):
+            return tuple(constructors.array(r, new_axes) for r in result)
         return constructors.array(result, new_axes)
 
 
@@ -1015,3 +1020,69 @@ def argpartition(
         An integer ``NamedArray`` containing the partitioning indices.
     """
     return wrap_axiswise_call(jnp.argpartition, single_axis_only=True)(a, axis, kth=kth)
+
+
+def cumulative_prod(
+    array: NamedArrayLike, axis: AxisSelector, dtype: DTypeLike | None = None, include_initial: bool = False
+) -> NamedArray:
+    """Cumulative sum along the axis of an array.
+
+    Args:
+        x: Input array
+        axis: Axis along which to compute the cumulative sum.
+        dtype: Optional dtype of the output.
+        include_initial: if True, then include the initial value in the cumulative product. Default is False.
+
+    Returns:
+        A ``NamedArray`` containing the accumulated values.
+    """
+    return wrap_axiswise_call(jnp.cumulative_prod, single_axis_only=True)(
+        array, axis, dtype=dtype, include_initial=include_initial
+    )
+
+
+def cumulative_sum(
+    array: NamedArrayLike, axis: AxisSelector, dtype: DTypeLike | None = None, include_initial: bool = False
+) -> NamedArray:
+    """Cumulative sum along the axis of an array.
+
+    Args:
+        array: Input array
+        axis: Axis along which to compute the cumulative sum.
+        dtype: Optional dtype of the output.
+        include_initial: if True, then include the initial value in the cumulative product. Default is False.
+
+    Returns:
+        A ``NamedArray`` containing the accumulated values.
+    """
+
+    return wrap_axiswise_call(jnp.cumulative_sum, single_axis_only=True)(
+        array, axis, dtype=dtype, include_initial=include_initial
+    )
+
+
+def count_nonzero(a: NamedArrayLike, axis: AxisSelection | None = None, keepdims: bool = False) -> NamedArray:
+    """Return the number of nonzero elements along a given axis.
+
+    Args:
+        array: input array.
+        axis: Axis along which the number of nonzeros are counted. If None, counts within the full array.
+        keepdims: bool, default=False. If true, reduced axes are left in the result with size 1.
+
+    Returns:
+        An array with number of nonzeros elements along specified axis of the input.
+    """
+
+    return wrap_reduction_call(jnp.count_nonzero)(a, axis, keepdims=keepdims)
+
+
+def minmax(
+    a: NamedArrayLike,
+    axis: AxisSelection | None = None,
+    keepdims: bool = False,
+    initial: NamedArrayLike | None = None,
+    where: NamedArrayLike | None = None,
+):
+    return wrap_reduction_call(jnp.minmax, supports_initial=True, supports_where=True)(
+        a, axis, keepdims=keepdims, initial=initial, where=where
+    )
