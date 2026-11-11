@@ -6,7 +6,7 @@ from jax.typing import DTypeLike
 
 from lynqx._src.axis import Axis, AxisLike, AxisSelector
 from lynqx._src.axis_util import axis_index
-from lynqx._src.named import constructors, util
+from lynqx._src.feipy import constructors, util
 from lynqx._src.typing import NamedArray, NamedArrayLike
 
 

@@ -1,8 +1,8 @@
-from lynqx._src.named.constructors import (
+from lynqx._src.feipy.constructors import (
     array as array,
     asnamedarray as asnamedarray,
 )
-from lynqx._src.named.creation import (
+from lynqx._src.feipy.creation import (
     arange as arange,
     delta as delta,
     empty as empty,
@@ -28,7 +28,7 @@ from lynqx._src.named.creation import (
     zeros as zeros,
     zeros_like as zeros_like,
 )
-from lynqx._src.named.indexing import (
+from lynqx._src.feipy.indexing import (
     choose as choose,
     diagonal as diagonal,
     dynamic_slice as dynamic_slice,
@@ -37,8 +37,8 @@ from lynqx._src.named.indexing import (
     take as take,
     take_along_axis as take_along_axis,
 )
-from lynqx._src.named.methods import register_namedarray_methods
-from lynqx._src.named.operations import (
+from lynqx._src.feipy.methods import register_namedarray_methods
+from lynqx._src.feipy.operations import (
     allclose as allclose,
     angle as angle,
     append as append,
@@ -93,7 +93,7 @@ from lynqx._src.named.operations import (
     unstack as unstack,
     where as where,
 )
-from lynqx._src.named.polynomials import (
+from lynqx._src.feipy.polynomials import (
     poly as poly,
     polyadd as polyadd,
     polyder as polyder,
@@ -106,7 +106,7 @@ from lynqx._src.named.polynomials import (
     roots as roots,
     vander as vander,
 )
-from lynqx._src.named.reductions import (
+from lynqx._src.feipy.reductions import (
     all as all,
     amax as amax,
     amin as amin,
@@ -152,14 +152,14 @@ from lynqx._src.named.reductions import (
     wrap_axiswise_call as wrap_axiswise_call,
     wrap_reduction_call as wrap_reduction_call,
 )
-from lynqx._src.named.signal import (
+from lynqx._src.feipy.signal import (
     bartlett as bartlett,
     blackman as blackman,
     hamming as hamming,
     hanning as hanning,
     kaiser as kaiser,
 )
-from lynqx._src.named.tensor_contractions import (
+from lynqx._src.feipy.tensor_contractions import (
     dot as dot,
     matmul as matmul,
     multi_dot as multi_dot,
@@ -167,7 +167,7 @@ from lynqx._src.named.tensor_contractions import (
     trace as trace,
     vecdot as vecdot,
 )
-from lynqx._src.named.ufuncs import (
+from lynqx._src.feipy.ufuncs import (
     abs as abs,
     absolute as absolute,
     acos as acos,

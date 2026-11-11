@@ -5,7 +5,7 @@ import jax.lax as lax
 import jax.numpy as jnp
 from jax import Array
 
-from lynqx._src.named import constructors, operations, util
+from lynqx._src.feipy import constructors, operations, util
 from lynqx._src.typing import NamedArray, NamedArrayLike
 
 

@@ -5,7 +5,7 @@ from jax.typing import DTypeLike
 
 from lynqx._src.axis import AxisSelection, AxisSelector
 from lynqx._src.axis_util import axis_indices, axis_selection_to_tuple, remove_axes
-from lynqx._src.named import constructors, creation, operations, util
+from lynqx._src.feipy import constructors, creation, operations, util
 from lynqx._src.partition import ShardingLike
 from lynqx._src.typing import NamedArray, NamedArrayLike, ScalarLike
 

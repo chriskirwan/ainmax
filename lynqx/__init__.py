@@ -1,6 +1,6 @@
 from lynqx import (
     axis_util as axis_util,
-    named as named,
+    feipy as feipy,
     typing as typing,
 )
 from lynqx._src.axis import Axis as Axis

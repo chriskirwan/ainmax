@@ -4,7 +4,7 @@ import jax.numpy as jnp
 
 from lynqx._src.axis import Axis, AxisLike
 from lynqx._src.axis_util import axis_index
-from lynqx._src.named import constructors, util
+from lynqx._src.feipy import constructors, util
 from lynqx._src.typing import NamedArray, NamedArrayLike
 
 
