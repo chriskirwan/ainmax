@@ -2,9 +2,9 @@ import equinox as eqx
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from lynqx._src.array import NamedArrayImpl
-from lynqx._src.axis import Axis
-from lynqx._src.filters import (
+from ainmax._src.array import NamedArrayImpl
+from ainmax._src.axis import Axis
+from ainmax._src.filters import (
     assert_single_array_leaf,
     is_arrayish,
     is_inexact_arrayish,

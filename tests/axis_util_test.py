@@ -1,7 +1,6 @@
 import pytest
-from hypothesis import given, strategies as st
-from lynqx._src.axis import Axis
-from lynqx._src.axis_util import (
+from ainmax._src.axis import Axis
+from ainmax._src.axis_util import (
     axis_index,
     axis_indices,
     axis_names,
@@ -25,6 +24,7 @@ from lynqx._src.axis_util import (
     union_axes,
     validate_unique_axes,
 )
+from hypothesis import given, strategies as st
 from strategies import (
     axes as axes_strategy,
     disjoint_named_axis_tuple_pairs,

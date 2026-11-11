@@ -1,8 +1,8 @@
 import jax.numpy as jnp
+from ainmax._src.axis import Axis
+from ainmax._src.feipy.constructors import array
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
-from lynqx._src.axis import Axis
-from lynqx._src.named.constructors import array
 
 
 axis_names = st.sampled_from(["x", "y", "z", "batch", "link"])
