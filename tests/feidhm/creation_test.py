@@ -3,8 +3,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from ainmax._src.axis import Axis
-from ainmax._src.feipy.constructors import array
-from ainmax._src.feipy.creation import (
+from ainmax._src.feidhm.constructors import array
+from ainmax._src.feidhm.creation import (
     arange,
     delta,
     empty,

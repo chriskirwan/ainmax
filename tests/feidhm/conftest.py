@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import pytest
 from ainmax._src.axis import Axis
-from ainmax._src.feipy.constructors import array
+from ainmax._src.feidhm.constructors import array
 
 
 @pytest.fixture

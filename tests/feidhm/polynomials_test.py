@@ -3,9 +3,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from ainmax._src.axis import Axis
-from ainmax._src.feipy.constructors import array
-from ainmax._src.feipy.creation import ones
-from ainmax._src.feipy.polynomials import (
+from ainmax._src.feidhm.constructors import array
+from ainmax._src.feidhm.creation import ones
+from ainmax._src.feidhm.polynomials import (
     poly,
     polyadd,
     polyder,

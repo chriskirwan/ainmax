@@ -18,7 +18,7 @@ from ainmax._src.axis_util import (
     axis_sizes,
     check_unique_axis_names,
 )
-from ainmax._src.feipy import constructors, util
+from ainmax._src.feidhm import constructors, util
 from ainmax._src.partition import ShardingLike
 from ainmax._src.sharding import canonicalize_sharding
 from ainmax._src.typing import (
@@ -552,7 +552,7 @@ def linspace(
     if isinstance(axis, str):
         axis = Axis(50, axis)  # numpy default
 
-    from ainmax._src.feipy.operations import broadcast_arrays_and_shape
+    from ainmax._src.feidhm.operations import broadcast_arrays_and_shape
 
     (start, stop), common_axes = broadcast_arrays_and_shape(start, stop)
     if axis.name in axis_names(common_axes):
@@ -600,7 +600,7 @@ def logspace(
     if isinstance(axis, str):
         axis = Axis(50, axis)  # numpy default
 
-    from ainmax._src.feipy.operations import broadcast_arrays_and_shape
+    from ainmax._src.feidhm.operations import broadcast_arrays_and_shape
 
     (start, stop, base), common_axes = broadcast_arrays_and_shape(start, stop, base)
     if axis.name in axis_names(common_axes):
@@ -639,7 +639,7 @@ def geomspace(
     if isinstance(axis, str):
         axis = Axis(50, axis)  # numpy default
 
-    from ainmax._src.feipy.operations import broadcast_arrays_and_shape
+    from ainmax._src.feidhm.operations import broadcast_arrays_and_shape
 
     (start, stop), common_axes = broadcast_arrays_and_shape(start, stop)
     if axis.name in axis_names(common_axes):
@@ -688,7 +688,7 @@ def delta(
 
     new_dtype = jnp.float32 if dtype is None else dtype
     casted_result = eqx.tree_at(lambda m: m.array, result, replace_fn=lambda x: jnp.astype(x, new_dtype))
-    from ainmax._src.feipy.operations import broadcast_to
+    from ainmax._src.feidhm.operations import broadcast_to
 
     return broadcast_to(casted_result, shape, out_sharding=out_sharding)
 
@@ -736,7 +736,7 @@ def _tri_mask(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, k: in
     if idx0 == idx1:
         raise ValueError(f"axis1 and axis2 must be distinct, both resolved to position {idx0}")
 
-    from ainmax._src.feipy.operations import broadcast_to
+    from ainmax._src.feidhm.operations import broadcast_to
 
     idx0, idx1 = axis_indices(array.axes, (axis1, axis2))
     if idx0 == idx1:

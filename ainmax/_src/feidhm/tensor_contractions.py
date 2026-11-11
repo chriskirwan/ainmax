@@ -14,7 +14,7 @@ from ainmax._src.axis_util import (
     match_axes,
     remove_axes,
 )
-from ainmax._src.feipy import constructors, util
+from ainmax._src.feidhm import constructors, util
 from ainmax._src.partition import ShardingLike
 from ainmax._src.sharding import canonicalize_sharding
 from ainmax._src.typing import NamedArray, NamedArrayLike

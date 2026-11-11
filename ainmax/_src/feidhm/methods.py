@@ -6,7 +6,7 @@ from jax.typing import DTypeLike
 
 from ainmax._src.array import NamedArrayImpl
 from ainmax._src.axis import AxisLike, AxisSelection, AxisSelector, AxisShape
-from ainmax._src.feipy import constructors, indexing, operations, reductions, tensor_contractions, ufuncs, util
+from ainmax._src.feidhm import constructors, indexing, operations, reductions, tensor_contractions, ufuncs, util
 from ainmax._src.partition import ShardingLike
 from ainmax._src.sharding import device_put
 from ainmax._src.typing import NamedArray, NamedArrayLike, ScalarLike

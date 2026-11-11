@@ -2,11 +2,11 @@ import operator
 
 import jax.numpy as jnp
 import pytest
-from ainmax._src.feipy import ufuncs
-from ainmax._src.feipy.constructors import array
-from ainmax._src.feipy.creation import ones
-from ainmax._src.feipy.indexing import NamedIndexUpdateHelper
-from ainmax._src.feipy.methods import _set_namedarray_attributes, register_namedarray_methods
+from ainmax._src.feidhm import ufuncs
+from ainmax._src.feidhm.constructors import array
+from ainmax._src.feidhm.creation import ones
+from ainmax._src.feidhm.indexing import NamedIndexUpdateHelper
+from ainmax._src.feidhm.methods import _set_namedarray_attributes, register_namedarray_methods
 
 
 register_namedarray_methods()

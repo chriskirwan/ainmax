@@ -3,9 +3,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 from ainmax._src.axis import Axis
-from ainmax._src.feipy.constructors import array
-from ainmax._src.feipy.creation import identity, ones, zeros
-from ainmax._src.feipy.indexing import (
+from ainmax._src.feidhm.constructors import array
+from ainmax._src.feidhm.creation import identity, ones, zeros
+from ainmax._src.feidhm.indexing import (
     choose,
     diagonal,
     dynamic_slice,
@@ -14,7 +14,7 @@ from ainmax._src.feipy.indexing import (
     take,
     take_along_axis,
 )
-from ainmax._src.feipy.methods import register_namedarray_methods
+from ainmax._src.feidhm.methods import register_namedarray_methods
 from hypothesis import given, strategies as st
 
 

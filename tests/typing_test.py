@@ -1,6 +1,6 @@
 import ainmax as anx
 import pytest
-from ainmax._src.feipy.creation import ones
+from ainmax._src.feidhm.creation import ones
 from ainmax._src.typing import (
     _make_dtype,
     _make_named_array_type,

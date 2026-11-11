@@ -10,7 +10,7 @@ from jax import Array
 
 from ainmax._src.axis import Axis, AxisLike, AxisSelector
 from ainmax._src.axis_util import axis_index, axis_indices, check_unique_axis_names, remove_axes
-from ainmax._src.feipy import constructors, operations, util
+from ainmax._src.feidhm import constructors, operations, util
 from ainmax._src.partition import ShardingLike
 from ainmax._src.sharding import canonicalize_sharding
 from ainmax._src.typing import NamedArray, NamedArrayLike

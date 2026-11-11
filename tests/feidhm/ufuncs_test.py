@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from ainmax._src.array import NamedArrayImpl
 from ainmax._src.axis import Axis
-from ainmax._src.feipy import ufuncs
+from ainmax._src.feidhm import ufuncs
 
 
 jax.config.update("jax_enable_x64", True)
