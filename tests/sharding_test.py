@@ -28,18 +28,18 @@ from unittest.mock import MagicMock
 import jax
 import jax.numpy as jnp
 import pytest
-from jax import NamedSharding, P
-from lynqx._src.array import NamedArrayImpl
-from lynqx._src.axis import AxisShape
-from lynqx._src.axis_util import axis_shape_to_tuple, axis_sizes
-from lynqx._src.partition import PM
-from lynqx._src.sharding import (
+from ainmax._src.array import NamedArrayImpl
+from ainmax._src.axis import AxisShape
+from ainmax._src.axis_util import axis_shape_to_tuple, axis_sizes
+from ainmax._src.partition import PM
+from ainmax._src.sharding import (
     auto_mesh_axes,
     canonicalize_sharding,
     device_put,
     reshard,
     with_sharding_constraint,
 )
+from jax import NamedSharding, P
 
 
 def named(a: Any, shape: AxisShape):
@@ -132,7 +132,7 @@ class TestAutoMeshAxes:
 
         monkeypatch.setattr(jax.sharding, "auto_axes", fake_auto_axes)
         monkeypatch.setattr(
-            "lynqx._src.sharding.canonicalize_sharding",
+            "ainmax._src.sharding.canonicalize_sharding",
             lambda axes, sharding, fn_name: sharding,
         )
 
@@ -152,7 +152,7 @@ class TestAutoMeshAxes:
             seen["fn_name"] = fn_name
             return sharding
 
-        monkeypatch.setattr("lynqx._src.sharding.canonicalize_sharding", fake_canonicalize)
+        monkeypatch.setattr("ainmax._src.sharding.canonicalize_sharding", fake_canonicalize)
         monkeypatch.setattr(jax.sharding, "auto_axes", lambda f, out_sharding: out_sharding)
 
         auto_mesh_axes(lambda x: x, ("batch",), P("data"))

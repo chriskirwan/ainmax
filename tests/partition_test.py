@@ -1,7 +1,7 @@
+from ainmax._src.axis import Axis
+from ainmax._src.partition import PM
 from hypothesis import given, strategies as st
 from jax import P
-from lynqx._src.axis import Axis
-from lynqx._src.partition import PM
 from strategies import (
     axes as axis_strategy,
     axis_names as name_strategy,

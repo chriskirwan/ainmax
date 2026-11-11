@@ -1,10 +1,7 @@
-import lynqx as lqx
+import ainmax as anx
 import pytest
-from beartype import beartype
-from jaxtyping import jaxtyped, TypeCheckError
-from jaxtyping._storage import pop_shape_memo, push_shape_memo
-from lynqx._src.named.creation import ones
-from lynqx._src.typing import (
+from ainmax._src.feipy.creation import ones
+from ainmax._src.typing import (
     _make_dtype,
     _make_named_array_type,
     _validate_ordered,
@@ -16,6 +13,9 @@ from lynqx._src.typing import (
     NamedAxisSpec,
     Shaped,
 )
+from beartype import beartype
+from jaxtyping import jaxtyped, TypeCheckError
+from jaxtyping._storage import pop_shape_memo, push_shape_memo
 
 
 class TestNamedAxisSpecGrammar:
@@ -157,29 +157,29 @@ class TestAxisValidationUnordered:
 
     def test_exact_named_axes_pass(self):
         spec = NamedAxisSpec("{a b}")
-        axes = (lqx.Axis(2, "a"), lqx.Axis(3, "b"))
+        axes = (anx.Axis(2, "a"), anx.Axis(3, "b"))
         _validate_unordered(axes, spec)
 
     def test_extra_axes_on_instance_are_allowed(self):
         spec = NamedAxisSpec("{a}")
-        axes = (lqx.Axis(2, "a"), lqx.Axis(3, "b"), lqx.Axis(4, None))
+        axes = (anx.Axis(2, "a"), anx.Axis(3, "b"), anx.Axis(4, None))
         _validate_unordered(axes, spec)
 
     def test_missing_axis_raises(self):
         spec = NamedAxisSpec("{a b}")
-        axes = (lqx.Axis(2, "a"),)
+        axes = (anx.Axis(2, "a"),)
         with pytest.raises(NamedArrayAxisError, match="missing axis 'b'"):
             _validate_unordered(axes, spec)
 
     def test_wrong_explicit_size_raises(self):
         spec = NamedAxisSpec("{a:3}")
-        axes = (lqx.Axis(5, "a"),)
+        axes = (anx.Axis(5, "a"),)
         with pytest.raises(NamedArrayAxisError, match="has size 5, expected 3"):
             _validate_unordered(axes, spec)
 
     def test_anonymous_axes_on_instance_are_ignored(self):
         spec = NamedAxisSpec("{a}")
-        axes = (lqx.Axis(2, "a"), lqx.Axis(99, None))
+        axes = (anx.Axis(2, "a"), anx.Axis(99, None))
         _validate_unordered(axes, spec)
 
 
@@ -192,106 +192,106 @@ class TestAxisValidationOrdered:
 
     def test_exact_match_passes(self):
         spec = NamedAxisSpec("a b")
-        axes = (lqx.Axis(2, "a"), lqx.Axis(3, "b"))
+        axes = (anx.Axis(2, "a"), anx.Axis(3, "b"))
         _validate_ordered(axes, spec)
 
     def test_wrong_order_fails(self):
         spec = NamedAxisSpec("a b")
-        axes = (lqx.Axis(3, "b"), lqx.Axis(2, "a"))
+        axes = (anx.Axis(3, "b"), anx.Axis(2, "a"))
         with pytest.raises(NamedArrayAxisError):
             _validate_ordered(axes, spec)
 
     def test_exact_wrong_length_fails(self):
         spec = NamedAxisSpec("a b")
-        axes = (lqx.Axis(2, "a"), lqx.Axis(3, "b"), lqx.Axis(4, "c"))
+        axes = (anx.Axis(2, "a"), anx.Axis(3, "b"), anx.Axis(4, "c"))
         with pytest.raises(NamedArrayAxisError):
             _validate_ordered(axes, spec)
 
     def test_anonymous_token_matches_any_anonymous_axis(self):
         spec = NamedAxisSpec("a _ b")
-        axes = (lqx.Axis(2, "a"), lqx.Axis(999, None), lqx.Axis(3, "b"))
+        axes = (anx.Axis(2, "a"), anx.Axis(999, None), anx.Axis(3, "b"))
         _validate_ordered(axes, spec)
 
     def test_anonymous_token_rejects_named_axis(self):
         spec = NamedAxisSpec("a _ b")
-        axes = (lqx.Axis(2, "a"), lqx.Axis(999, "oops"), lqx.Axis(3, "b"))
+        axes = (anx.Axis(2, "a"), anx.Axis(999, "oops"), anx.Axis(3, "b"))
         with pytest.raises(NamedArrayAxisError):
             _validate_ordered(axes, spec)
 
     def test_anonymous_token_with_size_checks_size(self):
         spec = NamedAxisSpec("a _:5 b")
-        ok_axes = (lqx.Axis(2, "a"), lqx.Axis(5, None), lqx.Axis(3, "b"))
-        bad_axes = (lqx.Axis(2, "a"), lqx.Axis(6, None), lqx.Axis(3, "b"))
+        ok_axes = (anx.Axis(2, "a"), anx.Axis(5, None), anx.Axis(3, "b"))
+        bad_axes = (anx.Axis(2, "a"), anx.Axis(6, None), anx.Axis(3, "b"))
         _validate_ordered(ok_axes, spec)
         with pytest.raises(NamedArrayAxisError):
             _validate_ordered(bad_axes, spec)
 
     def test_bare_digit_token_checks_size_same_as_underscore_colon_form(self):
         spec = NamedAxisSpec("x y 3")
-        ok_axes = (lqx.Axis(32, "x"), lqx.Axis(32, "y"), lqx.Axis(3, None))
-        bad_axes = (lqx.Axis(32, "x"), lqx.Axis(32, "y"), lqx.Axis(4, None))
+        ok_axes = (anx.Axis(32, "x"), anx.Axis(32, "y"), anx.Axis(3, None))
+        bad_axes = (anx.Axis(32, "x"), anx.Axis(32, "y"), anx.Axis(4, None))
         _validate_ordered(ok_axes, spec)
         with pytest.raises(NamedArrayAxisError):
             _validate_ordered(bad_axes, spec)
 
     def test_suffix_allows_leading_extra_axes(self):
         spec = NamedAxisSpec("... a b")
-        axes = (lqx.Axis(9, "extra1"), lqx.Axis(9, "extra2"), lqx.Axis(2, "a"), lqx.Axis(3, "b"))
+        axes = (anx.Axis(9, "extra1"), anx.Axis(9, "extra2"), anx.Axis(2, "a"), anx.Axis(3, "b"))
         _validate_ordered(axes, spec)
 
     def test_suffix_fails_if_too_short(self):
         spec = NamedAxisSpec("... a b")
-        axes = (lqx.Axis(2, "a"),)
+        axes = (anx.Axis(2, "a"),)
         with pytest.raises(NamedArrayAxisError):
             _validate_ordered(axes, spec)
 
     def test_prefix_allows_trailing_extra_axes(self):
         spec = NamedAxisSpec("a b ...")
-        axes = (lqx.Axis(2, "a"), lqx.Axis(3, "b"), lqx.Axis(9, "extra"))
+        axes = (anx.Axis(2, "a"), anx.Axis(3, "b"), anx.Axis(9, "extra"))
         _validate_ordered(axes, spec)
 
     def test_scalar_spec_requires_zero_axes(self):
         spec = NamedAxisSpec("")
         _validate_ordered((), spec)
         with pytest.raises(NamedArrayAxisError):
-            _validate_ordered((lqx.Axis(1, "a"),), spec)
+            _validate_ordered((anx.Axis(1, "a"),), spec)
 
     def test_wildcard_matches_any_axes_via_validate_ordered(self):
         spec = NamedAxisSpec("...")
         _validate_ordered((), spec)
-        _validate_ordered((lqx.Axis(1, "a"), lqx.Axis(2, None)), spec)
+        _validate_ordered((anx.Axis(1, "a"), anx.Axis(2, None)), spec)
 
 
 class TestDtypeAndInstanceValidation:
     def test_matching_dtype_and_axes_passes(self):
-        chain = lqx.Axis(4, "chain")
+        chain = anx.Axis(4, "chain")
         arr = ones(chain, dtype="csingle")
-        assert isinstance(arr, Complex[lqx.NamedArray, "chain"])
+        assert isinstance(arr, Complex[anx.NamedArray, "chain"])
 
     def test_wrong_dtype_fails(self):
-        chain = lqx.Axis(4, "chain")
+        chain = anx.Axis(4, "chain")
         arr = ones(chain, dtype="csingle")
-        assert not isinstance(arr, Int[lqx.NamedArray, "chain"])
+        assert not isinstance(arr, Int[anx.NamedArray, "chain"])
 
     def test_wrong_axis_name_fails(self):
-        chain = lqx.Axis(4, "chain")
+        chain = anx.Axis(4, "chain")
         arr = ones(chain, dtype="csingle")
-        assert not isinstance(arr, Complex[lqx.NamedArray, "batch"])
+        assert not isinstance(arr, Complex[anx.NamedArray, "batch"])
 
     def test_wildcard_ignores_axes_but_checks_dtype(self):
-        chain = lqx.Axis(4, "chain")
+        chain = anx.Axis(4, "chain")
         arr = ones(chain, dtype="csingle")
-        assert isinstance(arr, Complex[lqx.NamedArray, "..."])
-        assert not isinstance(arr, Int[lqx.NamedArray, "..."])
+        assert isinstance(arr, Complex[anx.NamedArray, "..."])
+        assert not isinstance(arr, Int[anx.NamedArray, "..."])
 
     def test_shaped_accepts_any_dtype(self):
-        chain = lqx.Axis(4, "chain")
+        chain = anx.Axis(4, "chain")
         arr = ones(chain, dtype="csingle")
-        assert isinstance(arr, Shaped[lqx.NamedArray, "chain"])
+        assert isinstance(arr, Shaped[anx.NamedArray, "chain"])
 
     def test_scalar_spec_on_scalar_array(self):
         scalar = ones((), dtype="float32")
-        assert isinstance(scalar, Float[lqx.NamedArray, ""])
+        assert isinstance(scalar, Float[anx.NamedArray, ""])
 
     def test_plain_array_type_falls_through_to_stock_jaxtyping(self):
         import jax.numpy as jnp
@@ -334,8 +334,8 @@ class TestCaching:
         assert s1 is s2
 
     def test_repeated_annotation_syntax_reuses_cache(self):
-        c1 = Complex[lqx.NamedArray, "chain"]
-        c2 = Complex[lqx.NamedArray, "chain"]
+        c1 = Complex[anx.NamedArray, "chain"]
+        c2 = Complex[anx.NamedArray, "chain"]
         assert c1 is c2
 
 
@@ -348,22 +348,22 @@ class TestBindAxisUnordered:
 
     def test_first_occurrence_binds(self):
         spec = NamedAxisSpec("{chain}")
-        _validate_unordered((lqx.Axis(4, "chain"),), spec)
+        _validate_unordered((anx.Axis(4, "chain"),), spec)
 
     def test_consistent_second_occurrence_passes(self):
         spec = NamedAxisSpec("{chain}")
-        _validate_unordered((lqx.Axis(4, "chain"),), spec)
-        _validate_unordered((lqx.Axis(4, "chain"),), spec)
+        _validate_unordered((anx.Axis(4, "chain"),), spec)
+        _validate_unordered((anx.Axis(4, "chain"),), spec)
 
     def test_inconsistent_second_occurrence_raises(self):
         spec = NamedAxisSpec("{chain}")
-        _validate_unordered((lqx.Axis(4, "chain"),), spec)
+        _validate_unordered((anx.Axis(4, "chain"),), spec)
         with pytest.raises(NamedArrayAxisError, match="chain"):
-            _validate_unordered((lqx.Axis(8, "chain"),), spec)
+            _validate_unordered((anx.Axis(8, "chain"),), spec)
 
     def test_unrelated_axis_names_do_not_interact(self):
-        _validate_unordered((lqx.Axis(4, "chain"),), NamedAxisSpec("{chain}"))
-        _validate_unordered((lqx.Axis(99, "batch"),), NamedAxisSpec("{batch}"))
+        _validate_unordered((anx.Axis(4, "chain"),), NamedAxisSpec("{chain}"))
+        _validate_unordered((anx.Axis(99, "batch"),), NamedAxisSpec("{batch}"))
 
 
 class TestBindAxisOrdered:
@@ -375,15 +375,15 @@ class TestBindAxisOrdered:
 
     def test_anonymous_axes_are_not_bound(self):
         spec = NamedAxisSpec("batch _ chain")
-        axes_a = (lqx.Axis(2, "batch"), lqx.Axis(5, None), lqx.Axis(4, "chain"))
-        axes_b = (lqx.Axis(2, "batch"), lqx.Axis(999, None), lqx.Axis(4, "chain"))
+        axes_a = (anx.Axis(2, "batch"), anx.Axis(5, None), anx.Axis(4, "chain"))
+        axes_b = (anx.Axis(2, "batch"), anx.Axis(999, None), anx.Axis(4, "chain"))
         _validate_ordered(axes_a, spec)
         _validate_ordered(axes_b, spec)
 
     def test_named_axis_mismatch_across_calls_raises(self):
         spec = NamedAxisSpec("batch _ chain")
-        axes_a = (lqx.Axis(2, "batch"), lqx.Axis(5, None), lqx.Axis(4, "chain"))
-        axes_b = (lqx.Axis(2, "batch"), lqx.Axis(5, None), lqx.Axis(7, "chain"))
+        axes_a = (anx.Axis(2, "batch"), anx.Axis(5, None), anx.Axis(4, "chain"))
+        axes_b = (anx.Axis(2, "batch"), anx.Axis(5, None), anx.Axis(7, "chain"))
         _validate_ordered(axes_a, spec)
         with pytest.raises(NamedArrayAxisError, match="chain"):
             _validate_ordered(axes_b, spec)
@@ -394,25 +394,25 @@ class TestMemoResetsBetweenCalls:
         spec = NamedAxisSpec("chain")
 
         push_shape_memo({})
-        _validate_ordered((lqx.Axis(4, "chain"),), spec)
+        _validate_ordered((anx.Axis(4, "chain"),), spec)
         pop_shape_memo()
 
         push_shape_memo({})
         try:
-            _validate_ordered((lqx.Axis(8, "chain"),), spec)
+            _validate_ordered((anx.Axis(8, "chain"),), spec)
         finally:
             pop_shape_memo()
 
 
 class TestEndToEndJaxtyped:
     def test_matching_chain_sizes_succeed(self):
-        c_chain = Complex[lqx.NamedArray, "chain"]
+        c_chain = Complex[anx.NamedArray, "chain"]
 
         @jaxtyped(typechecker=beartype)
         def run_chains(fields: c_chain, keys: c_chain) -> c_chain:
             return fields * keys
 
-        chain = lqx.Axis(4, "chain")
+        chain = anx.Axis(4, "chain")
         u = ones(chain, dtype="csingle")
         v = ones(chain, dtype="csingle")
 
@@ -420,14 +420,14 @@ class TestEndToEndJaxtyped:
         assert out.axes == (chain,)
 
     def test_mismatched_chain_sizes_raise_type_violation_not_internal_error(self):
-        c_chain = Complex[lqx.NamedArray, "chain"]
+        c_chain = Complex[anx.NamedArray, "chain"]
 
         @jaxtyped(typechecker=beartype)
         def run_chains(fields: c_chain, keys: c_chain) -> c_chain:
             return fields * keys
 
-        chain_a = lqx.Axis(4, "chain")
-        chain_b = lqx.Axis(8, "chain")
+        chain_a = anx.Axis(4, "chain")
+        chain_b = anx.Axis(8, "chain")
         u = ones(chain_a, dtype="csingle")
         v = ones(chain_b, dtype="csingle")
 
@@ -438,13 +438,13 @@ class TestEndToEndJaxtyped:
         import jax.numpy as jnp
         from jaxtyping import Int as PlainInt
 
-        c_chain = Complex[lqx.NamedArray, "chain"]
+        c_chain = Complex[anx.NamedArray, "chain"]
 
         @jaxtyped(typechecker=beartype)
         def combine(fields: c_chain, indices: PlainInt[jnp.ndarray, "chain"]) -> c_chain:
             return fields
 
-        chain = lqx.Axis(4, "chain")
+        chain = anx.Axis(4, "chain")
         fields = ones(chain, dtype="csingle")
 
         combine(fields, jnp.zeros((4,), dtype=jnp.int32))

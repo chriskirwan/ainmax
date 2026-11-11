@@ -1,2 +1,2 @@
-<h1 align="center">Lynqx</h1>
-<h2 align="center">MCMC and Normalizing Flows for Lattice Field Theory, powered by JAX</h2>
+<h1 align="center">Animax</h1>
+<h2 align="center">Build powerful and scalable simulations and neural networks using named arrays.</h2>
