@@ -24,7 +24,7 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [tool.hatch.build]
-include = ["lynqx/*"]
+include = ["ainmax/*"]
 
 [dependency-groups]
 dev = [
