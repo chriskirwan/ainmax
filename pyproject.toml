@@ -1,7 +1,7 @@
 [project]
-name = "lynqx"
+name = "ainmax"
 version = "0.0.1"
-description = "Lattice Yang-Mills Gauge Theories in python, powered by JAX"
+description = "Scientific computing in JAX with named arrays"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [
@@ -14,7 +14,6 @@ classifiers = [
 dependencies = [
     "equinox>=0.13.8",
     "jax>=0.12.0.1",
-    "pydantic>=2.13.5",
 ]
 
 [project.optional-dependencies]
@@ -30,14 +29,14 @@ include = ["lynqx/*"]
 [dependency-groups]
 dev = [
     "pre-commit>=4.6.2",
-    "ipykernel>=7.4.0",
     "rich>=15.0.0",
     "ruff>=0.17.3",
     "matplotlib>=3.11.2",
     "pyqt6>=6.12.0",
     "pyrefly>=1.4.0",
 ]
-docs = ["zensical>=0.0.74"]
+docs = ["zensical>=0.0.74", "ipykernel>=7.4.0",]
+plot = ["matplotlib>=3.11.2", "pyqt6>=6.12.0"]
 test = [
     "beartype>=0.22.9",
     "hypothesis>=6.170.14",
