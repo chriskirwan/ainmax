@@ -9,7 +9,7 @@ from jax.typing import DTypeLike
 from jaxtyping import ScalarLike
 
 from ainmax._src.axis import Axis, AxisLike, AxisSelection, AxisSelector, AxisShape
-from ainmax._src.named import DotContraction, NamedIndexUpdateHelper, StaticScalar
+from ainmax._src.feipy import indexing, tensor_contractions
 from ainmax._src.partition import ShardingLike
 
 class NamedArray:
@@ -118,7 +118,7 @@ class NamedArray:
     def dot(
         self,
         b: NamedArrayLike,
-        spec: DotContraction,
+        spec: tensor_contractions.DotContraction,
         *,
         precision: PrecisionLike,
         preferred_element_type: DTypeLike | None = None,
@@ -217,7 +217,7 @@ class NamedArray:
         index: NamedArrayLike,
         *,
         mode: str | None = None,
-        fill_value: StaticScalar | None = None,
+        fill_value: indexing.StaticScalar | None = None,
         unique_indices: bool = False,
         indices_are_sorted: bool = False,
     ) -> Self: ...
@@ -239,7 +239,7 @@ class NamedArray:
 
     # JAX Extensions
     @property
-    def at(self) -> NamedIndexUpdateHelper: ...
+    def at(self) -> indexing.NamedIndexUpdateHelper: ...
     @property
     def sharding(self) -> Sharding: ...
     def to_device(self, device: Device | ShardingLike) -> Self: ...
