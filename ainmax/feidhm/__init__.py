@@ -1,8 +1,8 @@
-from ainmax._src.feipy.constructors import (
+from ainmax._src.feidhm.constructors import (
     array as array,
     asnamedarray as asnamedarray,
 )
-from ainmax._src.feipy.creation import (
+from ainmax._src.feidhm.creation import (
     arange as arange,
     delta as delta,
     empty as empty,
@@ -28,7 +28,7 @@ from ainmax._src.feipy.creation import (
     zeros as zeros,
     zeros_like as zeros_like,
 )
-from ainmax._src.feipy.indexing import (
+from ainmax._src.feidhm.indexing import (
     choose as choose,
     diagonal as diagonal,
     dynamic_slice as dynamic_slice,
@@ -37,8 +37,8 @@ from ainmax._src.feipy.indexing import (
     take as take,
     take_along_axis as take_along_axis,
 )
-from ainmax._src.feipy.methods import register_namedarray_methods
-from ainmax._src.feipy.operations import (
+from ainmax._src.feidhm.methods import register_namedarray_methods
+from ainmax._src.feidhm.operations import (
     allclose as allclose,
     angle as angle,
     append as append,
@@ -93,7 +93,7 @@ from ainmax._src.feipy.operations import (
     unstack as unstack,
     where as where,
 )
-from ainmax._src.feipy.polynomials import (
+from ainmax._src.feidhm.polynomials import (
     poly as poly,
     polyadd as polyadd,
     polyder as polyder,
@@ -106,7 +106,7 @@ from ainmax._src.feipy.polynomials import (
     roots as roots,
     vander as vander,
 )
-from ainmax._src.feipy.reductions import (
+from ainmax._src.feidhm.reductions import (
     all as all,
     amax as amax,
     amin as amin,
@@ -152,14 +152,14 @@ from ainmax._src.feipy.reductions import (
     wrap_axiswise_call as wrap_axiswise_call,
     wrap_reduction_call as wrap_reduction_call,
 )
-from ainmax._src.feipy.signal import (
+from ainmax._src.feidhm.signal import (
     bartlett as bartlett,
     blackman as blackman,
     hamming as hamming,
     hanning as hanning,
     kaiser as kaiser,
 )
-from ainmax._src.feipy.tensor_contractions import (
+from ainmax._src.feidhm.tensor_contractions import (
     dot as dot,
     matmul as matmul,
     multi_dot as multi_dot,
@@ -167,7 +167,7 @@ from ainmax._src.feipy.tensor_contractions import (
     trace as trace,
     vecdot as vecdot,
 )
-from ainmax._src.feipy.ufuncs import (
+from ainmax._src.feidhm.ufuncs import (
     abs as abs,
     absolute as absolute,
     acos as acos,

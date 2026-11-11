@@ -20,7 +20,7 @@ from ainmax._src.axis_util import (
     resolve_axes,
     validate_unique_axes,
 )
-from ainmax._src.feipy import constructors, reductions, ufuncs, util
+from ainmax._src.feidhm import constructors, reductions, ufuncs, util
 from ainmax._src.partition import ShardingLike
 from ainmax._src.sharding import canonicalize_sharding
 from ainmax._src.typing import NamedArray, NamedArrayLike

@@ -5,7 +5,7 @@ import jax.lax as lax
 import jax.numpy as jnp
 from jax import Array
 
-from ainmax._src.feipy import constructors, operations, util
+from ainmax._src.feidhm import constructors, operations, util
 from ainmax._src.typing import NamedArray, NamedArrayLike
 
 

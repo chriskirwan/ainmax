@@ -1,6 +1,6 @@
 from ainmax import (
     axis_util as axis_util,
-    feipy as feipy,
+    feidhm as feidhm,
     typing as typing,
 )
 from ainmax._src.axis import Axis as Axis

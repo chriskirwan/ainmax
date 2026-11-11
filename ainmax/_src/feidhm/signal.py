@@ -6,7 +6,7 @@ from jax.typing import DTypeLike
 
 from ainmax._src.axis import Axis, AxisLike, AxisSelector
 from ainmax._src.axis_util import axis_index
-from ainmax._src.feipy import constructors, util
+from ainmax._src.feidhm import constructors, util
 from ainmax._src.typing import NamedArray, NamedArrayLike
 
 

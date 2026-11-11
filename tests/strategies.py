@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 from ainmax._src.axis import Axis
-from ainmax._src.feipy.constructors import array
+from ainmax._src.feidhm.constructors import array
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
 
