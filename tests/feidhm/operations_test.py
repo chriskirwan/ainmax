@@ -12,6 +12,7 @@ from ainmax._src.feidhm.operations import (
     array_equal,
     array_equiv,
     astype,
+    bincount,
     block,
     broadcast_arrays,
     broadcast_arrays_and_shape,
@@ -21,6 +22,10 @@ from ainmax._src.feidhm.operations import (
     compress,
     concat,
     concatenate,
+    histogram,
+    histogram2d,
+    histogram_bin_edges,
+    histogramdd,
     isclose,
     iscomplex,
     iscomplexobj,
@@ -36,7 +41,6 @@ from ainmax._src.feidhm.operations import (
     tile,
     top_k,
     transpose,
-    trapezoid,
     unstack,
     where,
 )
@@ -1307,43 +1311,141 @@ class TestSearchsorted:
         assert bool((jnp.diff(merged) >= 0).all())
 
 
-class TestTrapezoid:
-    def test_named_coordinate_vector_and_named_axis(self, batch_array):
-        a = batch_array
-        x = array(jnp.asarray([0.0, 0.5, 2.0, 4.0]), (Axis(4, "x"),))
+class TestBincount:
+    def test_counts_minlength_and_named_output_axis(self):
+        values = array(jnp.array([0, 1, 1, 3, 3, 3]), (Axis(6, "sample"),))
+        result = bincount(values, minlength=5, axis="bin")
 
-        got = trapezoid(a, x=x, axis="x")
-        want = jnp.trapezoid(a.array, x=x.array, axis=1)
+        assert_named(result, (Axis(5, "bin"),), jnp.bincount(values.array, minlength=5))
 
-        assert got.axes == (Axis(3, "batch"), Axis(5, "y"))
-        assert jnp.allclose(got.array, want)
+    def test_weighted_counts_and_fixed_length(self):
+        values = array(jnp.array([0, 1, 1, 2]), (Axis(4, "sample"),))
+        weights = array(jnp.array([0.5, 2.0, 3.0, 4.0]), (Axis(4, "weight"),))
+        result = bincount(values, weights, length=5, axis=Axis(5, "bin"))
 
-    def test_default_coordinates_and_named_dx(self, batch_array):
-        a = batch_array
-        dx = array(jnp.asarray(2.0), ())
+        expected = jnp.bincount(values.array, weights=weights.array, length=5)
+        assert_named(result, (Axis(5, "bin"),), expected)
 
-        got = trapezoid(a, dx=dx, axis=1)
-        want = jnp.trapezoid(a.array, dx=2.0, axis=1)
+    def test_bad_weights_axes_and_non_1d_inputs_raise(self):
+        values = array(jnp.array([0, 1, 1]), (Axis(3, "sample"),))
+        with pytest.raises(ValueError, match="same number of elements"):
+            bincount(values, array(jnp.ones(2), (Axis(2, "weight"),)))
 
-        assert got.axes == (Axis(3, "batch"), Axis(5, "y"))
-        assert jnp.allclose(got.array, want)
+        with pytest.raises(ValueError, match="axis has size 3, expected 2"):
+            bincount(values, length=2, axis=Axis(3, "bin"))
 
-    def test_full_named_coordinates_are_aligned_to_input_axes(self, batch_array):
-        a = batch_array
-        x_data = jnp.broadcast_to(jnp.arange(4.0)[None, :, None], a.shape)
-        x = array(x_data, (Axis(3, "batch"), Axis(4, "x"), Axis(5, "y")))
+        with pytest.raises(ValueError, match="one-dimensional"):
+            bincount(array(jnp.ones((2, 2), dtype=jnp.int32), (Axis(2, "x"), Axis(2, "y"))))
 
-        got = trapezoid(a, x=x, axis="x")
-        want = jnp.trapezoid(a.array, x=x_data, axis=1)
 
-        assert jnp.allclose(got.array, want)
+class TestHistogram:
+    def test_counts_and_edges_match_jnp(self):
+        values = array(jnp.array([0.0, 0.5, 1.0, 1.5, 2.0]), (Axis(5, "sample"),))
+        counts, edges = histogram(values, bins=2, range=(0.0, 2.0), axis="bin")
+        expected_counts, expected_edges = jnp.histogram(values.array, bins=2, range=(0.0, 2.0))
 
-    def test_scalar_coordinate_keeps_jax_validation(self):
-        x = array(jnp.asarray(2.0), ())
+        assert_named(counts, (Axis(2, "bin"),), expected_counts)
+        assert_named(edges, (Axis(3, "bin"),), expected_edges)
 
-        with pytest.raises(ValueError, match="must contain the integration axis"):
-            trapezoid(array(jnp.arange(4.0), (Axis(4, "x"),)), x=x, axis="x")
+    def test_named_bins_infer_output_axis_name_and_weights_are_applied(self):
+        values = array(jnp.array([0.0, 1.0, 2.0, 3.0]), (Axis(4, "sample"),))
+        weights = array(jnp.array([1.0, 2.0, 3.0, 4.0]), (Axis(4, "weight"),))
+        bins = array(jnp.array([0.0, 2.0, 4.0]), (Axis(3, "edges"),))
+        counts, edges = histogram(values, bins=bins, weights=weights)
 
-    def test_unresolved_axis_raises(self, batch_array):
-        with pytest.raises(ValueError, match="axis 'missing' not found"):
-            trapezoid(batch_array, axis="missing")
+        expected_counts, expected_edges = jnp.histogram(values.array, bins=bins.array, weights=weights.array)
+        assert_named(counts, (Axis(2, "edges"),), expected_counts)
+        assert_named(edges, (Axis(3, "edges"),), expected_edges)
+
+    def test_density_and_bad_weight_or_axis_sizes(self):
+        values = array(jnp.array([0.0, 1.0, 2.0, 3.0]), (Axis(4, "sample"),))
+        weights = array(jnp.ones(3), (Axis(3, "weight"),))
+        with pytest.raises(ValueError, match="same number of elements"):
+            histogram(values, weights=weights)
+
+        with pytest.raises(ValueError, match="axis has size"):
+            histogram(values, bins=2, axis=Axis(3, "bin"))
+
+        counts, _ = histogram(values, bins=2, density=True)
+        expected, _ = jnp.histogram(values.array, bins=2, density=True)
+        np.testing.assert_allclose(counts.array, expected)
+
+
+class TestHistogramBinEdges:
+    def test_edges_match_jnp_and_named_bin_edges_infer_axis(self):
+        values = array(jnp.array([0.0, 1.0, 2.0, 3.0]), (Axis(4, "sample"),))
+        edges = histogram_bin_edges(values, bins=4, range=(0.0, 4.0), axis="bin")
+        expected = jnp.histogram_bin_edges(values.array, bins=4, range=(0.0, 4.0))
+        assert_named(edges, (Axis(5, "bin"),), expected)
+
+        named_bins = array(jnp.array([0.0, 1.0, 3.0]), (Axis(3, "limits"),))
+        inferred = histogram_bin_edges(values, bins=named_bins)
+        assert inferred.axes == (Axis(3, "limits"),)
+
+    def test_axis_object_must_match_edge_count(self):
+        values = array(jnp.arange(4.0), (Axis(4, "sample"),))
+        with pytest.raises(ValueError, match="axis has size 4, expected 3"):
+            histogram_bin_edges(values, bins=2, axis=Axis(4, "bin"))
+
+
+class TestHistogram2D:
+    def test_counts_and_edges_match_jnp(self):
+        x = array(jnp.array([0.0, 0.5, 1.0, 1.5]), (Axis(4, "x_sample"),))
+        y = array(jnp.array([0.0, 1.0, 0.5, 1.5]), (Axis(4, "y_sample"),))
+        result, xedges, yedges = histogram2d(
+            x, y, bins=(2, 3), range=((0.0, 2.0), (0.0, 2.0)), axes=("x_bin", "y_bin")
+        )
+        expected, expected_xedges, expected_yedges = jnp.histogram2d(
+            x.array, y.array, bins=(2, 3), range=((0.0, 2.0), (0.0, 2.0))
+        )
+
+        assert_named(result, (Axis(2, "x_bin"), Axis(3, "y_bin")), expected)
+        assert_named(xedges, (Axis(3, "x_bin"),), expected_xedges)
+        assert_named(yedges, (Axis(4, "y_bin"),), expected_yedges)
+
+    def test_weights_density_and_invalid_sizes(self):
+        x = array(jnp.array([0.0, 0.5, 1.0]), (Axis(3, "x"),))
+        y = array(jnp.array([0.0, 0.5, 1.0]), (Axis(3, "y"),))
+        weights = array(jnp.array([1.0, 2.0, 3.0]), (Axis(3, "weight"),))
+        result, _, _ = histogram2d(x, y, bins=2, weights=weights, density=True, axes=("row", "col"))
+        expected, _, _ = jnp.histogram2d(x.array, y.array, bins=2, weights=weights.array, density=True)
+        assert_named(result, (Axis(2, "row"), Axis(2, "col")), expected)
+
+        with pytest.raises(ValueError, match="same number of elements"):
+            histogram2d(x, array(jnp.arange(2.0), (Axis(2, "y"),)))
+        with pytest.raises(ValueError, match="axis has size"):
+            histogram2d(x, y, bins=2, axes=(Axis(3, "row"), "col"))
+
+
+class TestHistogramDD:
+    def test_counts_and_edges_match_jnp(self):
+        samples = jnp.array([[0.0, 0.0], [0.25, 0.5], [0.75, 0.25], [1.0, 1.0]])
+        named_samples = array(samples, (Axis(4, "sample"), Axis(2, "coordinate")))
+        result, edges = histogramdd(named_samples, bins=(2, 3), axes=("x_bin", "y_bin"))
+        expected, expected_edges = jnp.histogramdd(samples, bins=(2, 3))
+
+        assert_named(result, (Axis(2, "x_bin"), Axis(3, "y_bin")), expected)
+        assert len(edges) == 2
+        assert_named(edges[0], (Axis(3, "x_bin"),), expected_edges[0])
+        assert_named(edges[1], (Axis(4, "y_bin"),), expected_edges[1])
+
+    def test_weighted_density_histogram(self):
+        samples = array(
+            jnp.array([[0.0, 0.0], [0.25, 0.5], [0.75, 0.25], [1.0, 1.0]]), (Axis(4, "sample"), Axis(2, "coordinate"))
+        )
+        weights = array(jnp.array([1.0, 2.0, 3.0, 4.0]), (Axis(4, "weight"),))
+        result, edges = histogramdd(samples, bins=2, weights=weights, density=True, axes=("row", "col"))
+        expected, _ = jnp.histogramdd(samples.array, bins=2, weights=weights.array, density=True)
+        assert_named(result, (Axis(2, "row"), Axis(2, "col")), expected)
+        assert [edge.axes for edge in edges] == [(Axis(3, "row"),), (Axis(3, "col"),)]
+
+    def test_invalid_sample_weights_and_axis_count_raise(self):
+        samples = array(jnp.ones((3, 2)), (Axis(3, "sample"), Axis(2, "coordinate")))
+        with pytest.raises(ValueError, match="one entry per sample"):
+            histogramdd(samples, weights=array(jnp.ones(2), (Axis(2, "weight"),)))
+
+        with pytest.raises(ValueError, match="sample must have shape"):
+            histogramdd(array(jnp.ones(3), (Axis(3, "sample"),)))
+
+        with pytest.raises(ValueError, match="got 1 output axes"):
+            histogramdd(samples, bins=2, axes=("only_one",))
