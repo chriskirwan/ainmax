@@ -973,9 +973,9 @@ def allclose(
         the specified tolerances.
     """
 
-    (a, b, rtol, atol), common_shape = broadcast_arrays_and_shape(a, b, rtol, atol)
+    a, b, rtol, atol = broadcast_arrays(a, b, rtol, atol)
     jax_array = jnp.allclose(a.array, b.array, rtol.array, atol.array, equal_nan)
-    return constructors.asnamedarray(jax_array, common_shape)
+    return constructors.asnamedarray(jax_array, ())
 
 
 def isclose(
