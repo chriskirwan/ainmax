@@ -34,10 +34,10 @@ def iscomplex(a: NamedArrayLike) -> NamedArray:
     """Return a boolean array showing where the input is complex.
 
     Args:
-        x: The input array or scalar.
+        a: The input array or scalar.
 
     Returns:
-        A boolean ``NamedArray`` indicating whether ``a`` is elemetwise complex.
+        A boolean ``NamedArray`` indicating whether each element of ``a`` is complex.
     """
 
     a = util.ensure_named("iscomplex", a)
@@ -64,7 +64,7 @@ def isreal(a: NamedArrayLike) -> NamedArray:
     """Return a boolean array showing where the input is real.
 
     Args:
-        x: The input array or scalar.
+        a: The input array or scalar.
 
     Returns:
         A boolean ``NamedArray`` indicating whether ``a`` is elementwise real.
@@ -75,16 +75,16 @@ def isreal(a: NamedArrayLike) -> NamedArray:
 
 
 def isrealobj(a: Any) -> bool:
-    """Check whether the input is a complex number or contains complex elements.
+    """Check whether the input has a non-complex dtype.
 
     The decision is based on the input's dtype rather than its values, so arrays with zero imaginary parts are still
     considered complex.
 
     Args:
-        x: The input to test.
+        a: The input to test.
 
     Returns:
-        ``True`` if ``x`` has a complex dtype, otherwise ``False``.
+        ``True`` if ``a`` does not have a complex dtype, otherwise ``False``.
     """
     return jnp.isrealobj(a)
 
@@ -1875,6 +1875,56 @@ def isin(
     return constructors.array(result, element.axes)
 
 
+def bincount(
+    x: NamedArrayLike,
+    weights: NamedArrayLike | None = None,
+    minlength: int = 0,
+    *,
+    length: int | None = None,
+    axis: AxisLike | None = None,
+) -> NamedArray:
+    """Count occurrences of non-negative integers.
+
+    Each input value contributes one count to its corresponding bin. If
+    ``weights`` is supplied, its values are accumulated instead of unit counts.
+
+    Args:
+        x: One-dimensional array of non-negative integer values to count.
+        weights: Optional array containing one weight for each value in ``x``.
+        minlength: Minimum number of bins in the result.
+        length: Optional explicit number of bins in the result.
+        axis: Optional name or descriptor for the result's bin axis. If an
+            ``Axis`` is supplied, its size must match the result length.
+
+    Returns:
+        A one-dimensional ``NamedArray`` containing the count or weighted sum
+        for each bin.
+
+    Raises:
+        ValueError: If ``x`` is not one-dimensional, ``weights`` does not
+            contain one value per input, or ``axis`` has the wrong size.
+    """
+    x = util.ensure_named("bincount", x)
+    if x.ndim != 1:
+        raise ValueError(f"expected a one-dimensional array, got {x.ndim} dimensions")
+
+    if weights is not None:
+        weights = util.ensure_named("bincount", weights)
+        if x.ndim != 1:
+            raise ValueError(f"expected a one-dimensional array, got {x.ndim} dimensions")
+        if weights.size != x.size:
+            raise ValueError("bincount: weights must have the same number of elements as x")
+
+    result = jnp.bincount(
+        x.array,
+        weights=None if weights is None else weights.array,
+        minlength=minlength,
+        length=length,
+    )
+
+    return constructors.array(result, (_result_axis(axis, result.size, "bincount"),))
+
+
 def digitize(
     x: NamedArrayLike,
     bins: NamedArrayLike,
@@ -1906,85 +1956,301 @@ def digitize(
     return constructors.array(result, x.axes)
 
 
-def trapezoid(
-    a: NamedArrayLike,
-    x: NamedArrayLike | None = None,
-    dx: NamedArrayLike = 1.0,
-    axis: AxisSelector = -1,
-) -> NamedArray:
-    """Integrate along an axis using the composite trapezoidal rule.
+def _result_axis(
+    specification: AxisLike | None,
+    size: int,
+    name: str,
+) -> Axis:
+    """Construct an output axis, preserving an explicitly supplied name."""
+    if isinstance(specification, Axis):
+        if specification.size != size:
+            raise ValueError(f"{name}: axis has size {specification.size}, expected {size}")
+        return specification
 
-    If ``x`` is provided, its values specify the sample coordinates. Otherwise, equally spaced samples with spacing
-    ``dx`` are assumed.
+    return Axis(size, specification)
+
+
+def _histogram_inputs(
+    a: NamedArrayLike,
+    weights: NamedArrayLike | None,
+) -> tuple[NamedArray, Any]:
+    """Flatten histogram samples and optional weights."""
+    a = util.ensure_named("histogram", a)
+
+    if weights is None:
+        return a, None
+
+    weights = util.ensure_named("histogram", weights)
+    if weights.size != a.size:
+        raise ValueError("histogram: weights must have the same number of elements as the input")
+
+    return a, weights.array.reshape(-1)
+
+
+def _histogram_axis_pair(
+    axis: AxisLike | None,
+    bins: int,
+    name: str,
+) -> tuple[Axis, Axis]:
+    """Construct matching bin and bin-edge axes."""
+    if isinstance(axis, Axis):
+        if axis.size != bins:
+            raise ValueError(f"{name}: bin axis has size {axis.size}, expected {bins}")
+        label = axis.name
+    else:
+        label = axis
+
+    return Axis(bins, label), Axis(bins + 1, label)
+
+
+def histogram(
+    a: NamedArrayLike,
+    bins: int | NamedArrayLike = 10,
+    range: Sequence[Any] | None = None,
+    weights: NamedArrayLike | None = None,
+    density: bool | None = None,
+    *,
+    axis: AxisLike | None = None,
+) -> tuple[NamedArray, NamedArray]:
+    """Compute a one-dimensional histogram.
+
+    The input and optional weights are flattened before computing the
+    histogram. When ``bins`` is an array of bin edges with a named axis and
+    ``axis`` is not specified, that name is used for the histogram's bin axis.
 
     Args:
-        a: The array to integrate.
-        x: Optional sample coordinates. May be a rank-1 array corresponding to the integration axis, or a
-        higher-dimensional array broadcastable to ``a`` that includes the integration axis.
-        dx: Spacing between samples when ``x`` is ``None``. May be a scalar or an array broadcastable to the
-            remaining axes of ``a``.
-        axis: The axis along which to integrate. Defaults to the last axis.
+        a: Input values to bin.
+        bins: Number of equally spaced bins, or an array of bin edges.
+        range: Optional ``(minimum, maximum)`` range used when ``bins`` is an
+            integer.
+        weights: Optional weights with one value per input element.
+        density: If true, normalize the result to form a probability density.
+        axis: Optional name or descriptor for the histogram's bin axis. If an
+            ``Axis`` is supplied, its size must match the number of bins. The
+            returned edge array uses the same name with one additional element.
 
     Returns:
-        A ``NamedArray`` with the integration axis removed.
+        A tuple ``(hist, bin_edges)``. ``hist`` contains the bin counts or
+        weighted sums, and ``bin_edges`` contains the bin boundaries.
+
+    Raises:
+        ValueError: If ``weights`` does not contain one value per input
+            element, or ``axis`` has the wrong size.
     """
+    a, weights_array = _histogram_inputs(a, weights)
 
-    a = util.ensure_named("trapezoid", a)
-
-    idx = axis_index(a.axes, axis)
-    if idx is None:
-        raise ValueError(f"trapezoid: axis {axis!r} not found in {a.axes}")
-
-    integrated_axis = a.axes[idx]
-    out_axes = remove_axes(a.axes, idx)
-
-    if x is None:
-        dx = util.ensure_named("trapezoid", dx)
-        dx = broadcast_to(dx, out_axes)
-
-        result = jnp.trapezoid(a.array, axis=idx) * dx.array
-
+    if isinstance(bins, NamedArray):
+        bins_array = bins.array
+        inferred_name = bins.axes[0].name if bins.ndim == 1 else None
     else:
-        x = util.ensure_named("trapezoid", x)
+        bins_array = bins
+        inferred_name = None
 
-        if x.ndim == 0:
-            raise ValueError("trapezoid: `x` must contain the integration axis")
+    counts, edges = jnp.histogram(
+        a.array.reshape(-1),
+        bins=bins_array,
+        range=range,
+        weights=weights_array,
+        density=density,
+    )
 
-        if x.ndim == 1:
-            x_axis = x.axes[0]
+    specification = axis if axis is not None else inferred_name
+    bin_axis, edge_axis = _histogram_axis_pair(specification, counts.size, "histogram")
 
-            if x_axis.size != integrated_axis.size:
-                raise ValueError(
-                    f"trapezoid: `x` has {x_axis.size} samples, but axis {integrated_axis.label!r} has size "
-                    f"{integrated_axis.size}"
-                )
+    return (
+        constructors.array(counts, (bin_axis,)),
+        constructors.array(edges, (edge_axis,)),
+    )
 
-            if x_axis.name is not None and x_axis.name != integrated_axis.name:
-                raise ValueError(
-                    f"trapezoid: `x` axis {x_axis.name!r} does not match integration axis {integrated_axis.name!r}"
-                )
 
-            # Align the coordinate vector with the selected axis.
-            x_array = broadcast_to(x, a.axes)
+def histogram_bin_edges(
+    a: NamedArrayLike,
+    bins: int | NamedArrayLike = 10,
+    range: Sequence[Any] | None = None,
+    weights: NamedArrayLike | None = None,
+    *,
+    axis: AxisLike | None = None,
+) -> NamedArray:
+    """Compute the bin edges for a one-dimensional histogram.
 
-        else:
-            # Match the coordinate array's axes against the input axes.
-            matched = match_axes(x.axes, a.axes, allow_positional_fallback=True)
+    The input and optional weights are flattened before computing the edges.
+    When ``bins`` is an array of edges with a named axis and ``axis`` is not
+    specified, that name is used for the output axis.
 
-            axis_match = next((m for m in matched.matches if m.target == idx), None)
+    Args:
+        a: Input values used to determine the bin edges.
+        bins: Number of equally spaced bins, or an array of bin edges.
+        range: Optional ``(minimum, maximum)`` range used when ``bins`` is an
+            integer.
+        weights: Optional weights with one value per input element, passed to
+            the bin-edge calculation.
+        axis: Optional name or descriptor for the output edge axis. If an
+            ``Axis`` is supplied, its size must match the number of edges.
 
-            if axis_match is None:
-                raise ValueError(f"trapezoid: `x` must contain integration axis {integrated_axis.label!r}")
+    Returns:
+        A one-dimensional ``NamedArray`` containing the bin edges.
 
-            x_axis = x.axes[axis_match.source]
-            if x_axis.size != integrated_axis.size:
-                raise ValueError(
-                    f"trapezoid: `x` has {x_axis.size} samples along {integrated_axis.label!r}, "
-                    f"expected {integrated_axis.size}"
-                )
+    Raises:
+        ValueError: If ``weights`` does not contain one value per input
+            element, or ``axis`` has the wrong size.
+    """
+    a, weights_array = _histogram_inputs(a, weights)
 
-            x_array = broadcast_to(x, a.axes)
+    if isinstance(bins, NamedArray):
+        bins_array = bins.array
+        inferred_name = bins.axes[0].name if bins.ndim == 1 else None
+    else:
+        bins_array = bins
+        inferred_name = None
 
-        result = jnp.trapezoid(a.array, x=x_array.array, axis=idx)
+    edges = jnp.histogram_bin_edges(
+        a.array.reshape(-1),
+        bins=bins_array,
+        range=range,
+        weights=weights_array,
+    )
 
-    return constructors.array(result, out_axes)
+    specification = axis if axis is not None else inferred_name
+    edge_axis = _result_axis(specification, edges.size, "histogram_bin_edges")
+
+    return constructors.array(edges, (edge_axis,))
+
+
+def histogram2d(
+    x: NamedArrayLike,
+    y: NamedArrayLike,
+    bins: Any = 10,
+    range: Sequence[Any] | None = None,
+    weights: NamedArrayLike | None = None,
+    density: bool | None = None,
+    *,
+    axes: tuple[AxisLike | None, AxisLike | None] | None = None,
+) -> tuple[NamedArray, NamedArray, NamedArray]:
+    """Compute a two-dimensional histogram.
+
+    ``x`` and ``y`` are flattened and treated as paired coordinates. The
+    optional ``axes`` names the two histogram dimensions; each returned edge
+    array uses the name of its corresponding histogram axis.
+
+    Args:
+        x: Values for the first coordinate.
+        y: Values for the second coordinate.
+        bins: Bin count or bin edges for both dimensions, or a pair of bin
+            specifications.
+        range: Optional ranges for the two dimensions.
+        weights: Optional weight for each paired coordinate.
+        density: If true, normalize the result to form a probability density.
+        axes: Optional pair of names or axis descriptors for the histogram's
+            first and second dimensions. Supplied ``Axis`` sizes must match
+            the corresponding bin counts.
+
+    Returns:
+        A tuple ``(hist, x_edges, y_edges)`` containing the two-dimensional
+        histogram and the bin edges for each dimension.
+
+    Raises:
+        ValueError: If ``x`` and ``y`` have different numbers of elements,
+            ``weights`` does not contain one value per coordinate, or an
+            output axis has the wrong size.
+    """
+    x = util.ensure_named("histogram2d", x)
+    y = util.ensure_named("histogram2d", y)
+
+    if x.size != y.size:
+        raise ValueError("histogram2d: x and y must contain the same number of elements")
+
+    weights_array = None
+    if weights is not None:
+        weights = util.ensure_named("histogram2d", weights)
+        if weights.size != x.size:
+            raise ValueError("histogram2d: weights must have the same number of elements as x and y")
+        weights_array = weights.array.reshape(-1)
+
+    result, xedges, yedges = jnp.histogram2d(
+        x.array.reshape(-1),
+        y.array.reshape(-1),
+        bins=bins,
+        range=range,
+        weights=weights_array,
+        density=density,
+    )
+
+    axis_specs = axes if axes is not None else (None, None)
+    x_axis = _result_axis(axis_specs[0], result.shape[0], "histogram2d")
+    y_axis = _result_axis(axis_specs[1], result.shape[1], "histogram2d")
+
+    return (
+        constructors.array(result, (x_axis, y_axis)),
+        constructors.array(xedges, (x_axis.resize(xedges.size),)),
+        constructors.array(yedges, (y_axis.resize(yedges.size),)),
+    )
+
+
+def histogramdd(
+    sample: NamedArrayLike,
+    bins: Any = 10,
+    range: Sequence[Any] | None = None,
+    weights: NamedArrayLike | None = None,
+    density: bool | None = None,
+    *,
+    axes: Sequence[AxisLike | None] | None = None,
+) -> tuple[NamedArray, list[NamedArray]]:
+    """Compute an N-dimensional histogram from a sample matrix.
+
+    Each row of ``sample`` is one observation and each column is a dimension.
+
+    Args:
+        sample: A two-dimensional array with shape ``(num_samples,
+            num_dimensions)``.
+        bins: Bin count or bin edges, either shared across dimensions or
+            specified separately for each dimension.
+        range: Optional range for each sample dimension.
+        weights: Optional weight for each sample row.
+        density: If true, normalize the result to form a probability density.
+        axes: Optional name or axis descriptor for each histogram dimension.
+            Each supplied ``Axis`` must have the corresponding bin count.
+
+    Returns:
+        A tuple ``(hist, edges)``. ``hist`` is the N-dimensional histogram;
+        ``edges`` is a list of one-dimensional ``NamedArray`` bin-edge arrays,
+        one for each sample dimension.
+
+    Raises:
+        ValueError: If ``sample`` is not two-dimensional, ``weights`` does
+            not contain one value per sample, or ``axes`` has the wrong
+            number of entries or a supplied axis has the wrong size.
+    """
+    sample = util.ensure_named("histogramdd", sample)
+
+    if sample.ndim != 2:
+        raise ValueError("histogramdd: sample must have shape (N, D)")
+
+    weights_array = None
+    if weights is not None:
+        weights = util.ensure_named("histogramdd", weights)
+        if weights.size != sample.axes[0].size:
+            raise ValueError("histogramdd: weights must have one entry per sample")
+        weights_array = weights.array.reshape(-1)
+
+    result, edges = jnp.histogramdd(
+        sample.array,
+        bins=bins,
+        range=range,
+        weights=weights_array,
+        density=density,
+    )
+
+    if axes is None:
+        axis_specs = (None,) * result.ndim
+    else:
+        axis_specs = tuple(axes)
+        if len(axis_specs) != result.ndim:
+            raise ValueError(
+                f"histogramdd: got {len(axis_specs)} output axes for a {result.ndim}-dimensional histogram"
+            )
+
+    result_axes = tuple(_result_axis(spec, size, "histogramdd") for spec, size in zip(axis_specs, result.shape))
+
+    edge_arrays = [constructors.array(edge, (result_axes[i].resize(edge.size),)) for i, edge in enumerate(edges)]
+
+    return constructors.array(result, result_axes), edge_arrays
