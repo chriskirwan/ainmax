@@ -294,19 +294,6 @@ class TestTranspose:
             transpose(named_3d, ("x", "y"))
 
 
-# ---------------------------------------------------------------------------------------------------------------------
-# Tests for the remaining operations.
-#
-# Tests marked with `known_bug` assert the *correct* behaviour and currently fail because of a defect in the
-# implementation. They are `xfail(strict=True)`, so the suite goes red (XPASS) as soon as the bug is fixed, which
-# is the cue to delete the marker.
-# ---------------------------------------------------------------------------------------------------------------------
-
-
-def known_bug(reason):
-    return pytest.mark.xfail(strict=True, reason=reason, raises=(ValueError, AssertionError))
-
-
 def assert_named(res, axes, expected=None):
     """Check the axes of ``res`` and (optionally) the exact values of its underlying array."""
     assert res.axes == tuple(axes)
@@ -578,7 +565,6 @@ class TestPad:
         with pytest.raises(ValueError, match="more than once"):
             pad(mat, {"x": 1, 0: 2})
 
-    @known_bug("`_pad_callable` resolves the original (old-size) Axis against the padded result")
     def test_callable_mode_is_applied_axis_by_axis(self, mat):
         calls = []
 
@@ -955,16 +941,13 @@ class TestAllclose:
         assert bool(allclose(1.0, 1.0).array)
         assert not bool(allclose(1.0, 2.0).array)
 
-    @known_bug("`allclose` builds its scalar result with the broadcast axes instead of `()`")
     def test_arrays_reduce_to_a_scalar(self, mat):
         res = allclose(mat, mat + 1e-9)
         assert_named(res, (), jnp.array(True))
 
-    @known_bug("`allclose` builds its scalar result with the broadcast axes instead of `()`")
     def test_arrays_detect_a_difference(self, mat):
         assert not bool(allclose(mat, mat + 1.0).array)
 
-    @known_bug("`allclose` builds its scalar result with the broadcast axes instead of `()`")
     @given(named_arrays(min_dims=1, max_dims=3))
     def test_reflexive(self, a):
         assert bool(allclose(a, a).array)
