@@ -416,13 +416,14 @@ def _normalize_pad_width(axes: tuple[Axis, ...], pad_width: PadSpec) -> tuple[tu
 def _pad_callable(named, widths, fn, kwargs):
     """Apply a padding callable one axis at a time while validating the output shape."""
     out = named
-    for ax, (lo, hi) in zip(named.axes, widths):
+    for pos, (ax, (lo, hi)) in enumerate(zip(named.axes, widths)):
         if lo == 0 and hi == 0:
             continue
         out = util.ensure_named("pad", fn(out, ax, (lo, hi), **kwargs))
-        got = resolve_axes(out.axes, ax)[0]
-        if got.size != ax.size + lo + hi:
-            raise ValueError(f"pad callable returned size {got} for axis {ax.name!r}, expected {ax.size + lo + hi}")
+        got = resolve_axes(out.axes, ax.name)[0] if ax.name is not None else out.axes[pos]
+        expected = ax.size + lo + hi
+        if got.size != expected:
+            raise ValueError(f"pad callable returned size {got} for axis {ax.name}, expected {expected}")
     return out
 
 
