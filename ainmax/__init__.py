@@ -11,5 +11,6 @@ from ainmax._src.config import (
     numpy_dtype_promotion as numpy_dtype_promotion,
     short_arrays as short_arrays,
 )
+from ainmax._src.hof import fold as fold, scan as scan, vmap as vmap
 from ainmax._src.partition import PM as PM
 from ainmax._src.typing import NamedArray as NamedArray, NamedArrayLike as NamedArrayLike
