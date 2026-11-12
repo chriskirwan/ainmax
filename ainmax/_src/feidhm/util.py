@@ -1,6 +1,7 @@
 from collections.abc import Collection, Sequence
 from typing import Any, overload, TypeVar
 
+import equinox as eqx
 import jax.numpy as jnp
 
 from ainmax._src.array import NamedArrayImpl
@@ -8,6 +9,7 @@ from ainmax._src.axis import Axis, AxisLike
 from ainmax._src.axis_util import match_axes
 from ainmax._src.filters import is_named_array, is_scalar
 from ainmax._src.typing import NamedArray, NamedArrayLike
+from ainmax._src.util import default_floating_dtype
 
 
 T = TypeVar("T")
@@ -164,3 +166,19 @@ def resolve_new_axis(spec: AxisLike | None, size: int, fn_name: str, param: str)
         f"{fn_name}: `{param}` must be None, a str or an Axis, got {type(spec).__name__}. "
         "Integer selectors cannot name a new axis."
     )
+
+
+def promote_dtypes_inexact(*args: NamedArrayLike) -> list[NamedArray]:
+    named_args = [ensure_named("promote_dtypes_inexact", arg) for arg in args]
+
+    if not named_args:
+        return []
+
+    common_type = jnp.result_type(*(n.array for n in named_args))
+
+    if not jnp.issubdtype(common_type, jnp.inexact):
+        target_dtype = default_floating_dtype().floating
+    else:
+        target_dtype = common_type
+
+    return [eqx.tree_at(lambda x: x.array, n, replace_fn=lambda x: jnp.astype(x, target_dtype)) for n in named_args]
