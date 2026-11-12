@@ -1,0 +1,86 @@
+[project]
+site_name = "ainmax"
+site_description = "Lattice gauge theory and scientific computing with JAX"
+site_url = "https://chriskirwan.github.io/ainmax/"
+repo_url = "https://github.com/chriskirwan/ainmax"
+repo_name = "chriskirwan/ainmax"
+edit_uri = "edit/main/docs/"
+docs_dir = "docs"
+site_dir = "site"
+extra_css = ["stylesheets/extra.css"]
+extra_javascript = ["javascripts/sidebar-search.js"]
+
+nav = [
+  { "Home" = "index.md" },
+  { "The Sharp Bits" = "sharp_bits.md" }
+]
+
+[project.theme]
+variant = "modern"
+language = "en"
+logo = "assets/icons/logo-darkh.svg"
+features = [
+  "navigation.instant",
+  "navigation.instant.progress",
+  "navigation.sections",
+  "navigation.expand",
+  "navigation.path",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "content.code.copy",
+  "content.action.edit",
+]
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "indigo"
+accent = "blue"
+toggle = { icon = "material/weather-sunny", name = "Switch to light mode" }
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "indigo"
+accent = "blue"
+toggle = { icon = "material/weather-night", name = "Switch to dark mode" }
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/chriskirwan/ainmax"
+name = "GitHub"
+
+[[project.extra.social]]
+icon = "fontawesome/solid/book"
+link = "https://zensical.org/docs/"
+name = "Zensical documentation"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+toc.permalink = true
+pymdownx.arithmatex.generic = true
+pymdownx.betterem = {}
+pymdownx.caret = {}
+pymdownx.details = {}
+pymdownx.emoji.emoji_generator = "zensical.extensions.emoji.to_svg"
+pymdownx.emoji.emoji_index = "zensical.extensions.emoji.twemoji"
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.magiclink = {}
+pymdownx.mark = {}
+pymdownx.smartsymbols = {}
+# pymdownx.snippets.base_path = "includes"
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tabbed.combine_header_slug = true
+pymdownx.tasklist.custom_checkbox = true
+pymdownx.tilde = {}
