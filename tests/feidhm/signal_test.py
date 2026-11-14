@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+import jax.scipy.signal as jsignal
 import numpy as np
 import pytest
 from ainmax._src.axis import Axis
@@ -8,10 +9,15 @@ from ainmax._src.feidhm.signal import (
     blackman,
     convolve,
     correlate,
+    csd,
+    detrend,
     hamming,
     hanning,
+    istft,
     kaiser,
+    stft,
     unwrap,
+    welch,
 )
 from hypothesis import given, strategies as st
 
@@ -113,7 +119,7 @@ class TestConvolve:
             convolve(a, b)
 
         two_dimensional = array(jnp.ones((2, 3)), (Axis(2, "x"), Axis(3, "y")))
-        with pytest.raises(ValueError, match="one-dimensional"):
+        with pytest.raises(ValueError, match="same number of dimensions"):
             convolve(two_dimensional, b)
 
 
@@ -134,5 +140,146 @@ class TestCorrelate:
         with pytest.raises(ValueError, match="incompatible names"):
             correlate(a, b)
 
-        with pytest.raises(ValueError, match="one-dimensional"):
+        with pytest.raises(ValueError, match="same number of dimensions"):
             correlate(array(jnp.ones((2, 3)), (Axis(2, "x"), Axis(3, "y"))), b)
+
+
+class TestDetrend:
+    @pytest.mark.parametrize("trend_type", ["constant", "linear"])
+    def test_matches_jnp(self, trend_type):
+        values = jnp.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+        signal = array(values, (Axis(6, "time"),))
+
+        result = detrend(signal, axis="time", type=trend_type)
+
+        assert result.axes == signal.axes
+        np.testing.assert_allclose(result.array, jsignal.detrend(values, axis=0, type=trend_type))
+
+
+class TestSpectralAnalysis:
+    def test_csd_matches_jax_and_keeps_named_frequency_axis(self):
+        x = array(jnp.arange(8.0), (Axis(8, "time"),))
+        y = array(jnp.cos(jnp.linspace(0.0, 2.0 * jnp.pi, 8)), (Axis(8, "time"),))
+        freq_axis = Axis(5, "freq")
+
+        freqs, result = csd(
+            x, y, fs=2.0, nperseg=4, noverlap=2, nfft=8, detrend=False, axis="time", freq_axis=freq_axis
+        )
+        expected_freqs, expected = jsignal.csd(
+            x.array, y.array, fs=2.0, nperseg=4, noverlap=2, nfft=8, detrend=False, axis=0
+        )
+
+        assert freqs.axes == (freq_axis,)
+        assert result.axes == (freq_axis,)
+        np.testing.assert_allclose(freqs.array, expected_freqs)
+        np.testing.assert_allclose(result.array, expected)
+
+    def test_welch_matches_jax_and_keeps_named_frequency_axis(self):
+        x = array(jnp.arange(8.0), (Axis(8, "time"),))
+        freq_axis = Axis(5, "freq")
+
+        freqs, result = welch(
+            x, fs=2.0, nperseg=4, noverlap=2, nfft=8, detrend=False, axis="time", freq_axis=freq_axis
+        )
+        expected_freqs, expected = jsignal.welch(x.array, fs=2.0, nperseg=4, noverlap=2, nfft=8, detrend=False, axis=0)
+
+        assert freqs.axes == (freq_axis,)
+        assert result.axes == (freq_axis,)
+        np.testing.assert_allclose(freqs.array, expected_freqs)
+        np.testing.assert_allclose(result.array, expected)
+
+    def test_stft_matches_jax_and_keeps_named_axes(self):
+        x = array(jnp.arange(8.0), (Axis(8, "time"),))
+        freq_axis = Axis(5, "freq")
+        segment_axis = Axis(3, "segment")
+
+        freqs, times, result = stft(
+            x,
+            fs=2.0,
+            window="hann",
+            nperseg=4,
+            noverlap=0,
+            nfft=8,
+            boundary="zeros",
+            padded=False,
+            axis="time",
+            freq_axis=freq_axis,
+            time_axis=segment_axis,
+        )
+        expected_freqs, expected_times, expected = jsignal.stft(
+            x.array,
+            fs=2.0,
+            window="hann",
+            nperseg=4,
+            noverlap=0,
+            nfft=8,
+            boundary="zeros",
+            padded=False,
+            axis=0,
+        )
+
+        assert freqs.axes == (freq_axis,)
+        assert times.axes == (segment_axis,)
+        assert result.axes == (freq_axis, segment_axis)
+        np.testing.assert_allclose(freqs.array, expected_freqs)
+        np.testing.assert_allclose(times.array, expected_times)
+        np.testing.assert_allclose(result.array, expected)
+
+    def test_istft_matches_jax_for_named_axes(self):
+        x = array(jnp.arange(8.0), (Axis(8, "time"),))
+        freq_axis = Axis(5, "freq")
+        segment_axis = Axis(3, "segment")
+
+        _, _, zxx = stft(
+            x,
+            fs=2.0,
+            window="hann",
+            nperseg=4,
+            noverlap=0,
+            nfft=8,
+            boundary="zeros",
+            padded=False,
+            axis="time",
+            freq_axis=freq_axis,
+            time_axis=segment_axis,
+        )
+        times, result = istft(
+            zxx,
+            fs=2.0,
+            window="hann",
+            nperseg=4,
+            noverlap=0,
+            nfft=8,
+            input_onesided=True,
+            boundary=True,
+            time_axis="segment",
+            freq_axis="freq",
+        )
+
+        expected_times, expected = jsignal.istft(
+            jsignal.stft(
+                x.array,
+                fs=2.0,
+                window="hann",
+                nperseg=4,
+                noverlap=0,
+                nfft=8,
+                boundary="zeros",
+                padded=False,
+                axis=0,
+            )[2],
+            fs=2.0,
+            window="hann",
+            nperseg=4,
+            noverlap=0,
+            nfft=8,
+            input_onesided=True,
+            boundary=True,
+            time_axis=1,
+            freq_axis=0,
+        )
+
+        assert times.axes == (Axis(expected.size, "segment"),)
+        assert result.axes == (Axis(expected.size, "segment"),)
+        np.testing.assert_allclose(times.array, expected_times)
+        np.testing.assert_allclose(result.array, expected)
