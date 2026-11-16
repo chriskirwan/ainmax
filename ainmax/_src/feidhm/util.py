@@ -75,20 +75,38 @@ def align_shapes_for_broadcast(
         if l_ax.size != r_ax.size and l_ax.size != 1 and r_ax.size != 1:
             raise ValueError(f"Incompatible sizes for axis {l_ax.label!r}: {l_ax.size} vs {r_ax.size}")
 
-    matched_by_source = {m.source: m for m in matched.matches}
-    out_axes: list[Axis] = []
+    has_named = any(ax.name is not None for ax in (*lhs, *rhs))
+    if not has_named:
+        # Right-aligned API result: result rank = max(len(lhs), len(rhs)).
+        # Build it position by position from the right.
+        n = max(len(lhs), len(rhs))
+        out: list[Axis | None] = [None] * n
+        # matched pairs are right-aligned
+        for m in matched.matches:
+            out[n - (len(rhs) - m.target)] = Axis(max(lhs[m.source].size, rhs[m.target].size), None)
+        # extra leading axes on the longer side
+        for i in matched.unmatched_source:  # only present if lhs is longer
+            out[i] = lhs[i]
+        for j in matched.unmatched_target:  # only present if rhs is longer
+            out[j] = rhs[j]
 
-    for i, l_ax in enumerate(lhs):
-        if i in matched_by_source:
-            r_ax = rhs[matched_by_source[i].target]
-            out_axes.append(Axis(max(l_ax.size, r_ax.size), l_ax.name))
-        else:
-            out_axes.append(l_ax)
+        out_tuple = tuple(ax for ax in out if ax is not None)
+    else:
+        matched_by_source = {m.source: m for m in matched.matches}
+        out_axes: list[Axis] = []
 
-    for j in matched.unmatched_target:
-        out_axes.append(rhs[j])
+        for i, l_ax in enumerate(lhs):
+            if i in matched_by_source:
+                r_ax = rhs[matched_by_source[i].target]
+                out_axes.append(Axis(max(l_ax.size, r_ax.size), l_ax.name))
+            else:
+                out_axes.append(l_ax)
 
-    out_tuple = tuple(out_axes)
+        for j in matched.unmatched_target:
+            out_axes.append(rhs[j])
+
+        out_tuple = tuple(out_axes)
+
     return _align_source_and_target(lhs, out_tuple), _align_source_and_target(rhs, out_tuple), out_tuple
 
 
