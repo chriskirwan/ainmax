@@ -101,6 +101,11 @@ def _shape_last(name):
     return lambda k, s, *params: fn(k, *params, s)
 
 
+def _double_sided_maxwell_reference(key, shape, loc, scale):
+    standard = jax.random.double_sided_maxwell(key, 0.0, 1.0, shape)
+    return loc + scale * standard
+
+
 # Samplers without parameters: everything takes (key, shape, dtype).
 FLOAT_VALUED = ("normal", "uniform", "exponential", "laplace", "cauchy", "logistic", "gumbel", "maxwell")
 PARAMETER_FREE = (*FLOAT_VALUED, "bits", "rademacher")
@@ -126,20 +131,11 @@ PARAMETRIC = [
     ("triangular", (0.0, 1.0, 4.0), _shape_last("triangular")),
     ("binomial", (10.0, 0.4), _shape_last("binomial")),
     ("weibull_min", (2.0, 3.0), _shape_last("weibull_min")),
-    ("double_sided_maxwell", (1.0, 2.0), _shape_last("double_sided_maxwell")),
+    ("double_sided_maxwell", (1.0, 2.0), _double_sided_maxwell_reference),
 ]
 PARAMETRIC_IDS = [p[0] for p in PARAMETRIC]
 
-# `jax.random.double_sided_maxwell` *appends* the broadcast shape of (loc, scale) to `shape` instead of broadcasting
-# against it, so array-valued parameters give a result with too many dimensions (scalar parameters are fine). The
-# named wrapper inherits this; drawing a standard variate and applying `loc + scale * x` would fix it.
-_DSM_XFAIL = pytest.mark.xfail(
-    strict=True, reason="jax.random.double_sided_maxwell appends the parameter shape to `shape`", raises=ValueError
-)
-ARRAY_PARAM_CASES = [
-    pytest.param(*case, id=case[0], marks=_DSM_XFAIL if case[0] == "double_sided_maxwell" else ())
-    for case in PARAMETRIC
-]
+ARRAY_PARAM_CASES = [pytest.param(*case, id=case[0]) for case in PARAMETRIC]
 
 # These have no `out_sharding` in `jax.random`, so the named versions don't expose it either.
 NO_OUT_SHARDING = ("binomial", "weibull_min", "double_sided_maxwell", "multinomial", "choice")
@@ -942,9 +938,8 @@ class TestChoice:
         with pytest.raises(TypeError, match="choice requires"):
             nr.choice(key, table, (Axis(2, "s"),), axis="x", p=[0.25] * 4)
 
-    @pytest.mark.xfail(strict=True, reason="a scalar population currently dies with a bare IndexError in axis_indices")
     def test_scalar_population_raises_a_clear_error(self, key):
-        with pytest.raises((TypeError, ValueError)):
+        with pytest.raises(ValueError, match="choice requires an input with at least one axis"):
             nr.choice(key, 5, (Axis(2, "s"),))
 
 
@@ -992,9 +987,8 @@ class TestPermutation:
         assert got.axes == x.axes
         np.testing.assert_array_equal(np.sort(got.array, axis=pos), np.sort(x.array, axis=pos))
 
-    @pytest.mark.xfail(strict=True, reason="a scalar input currently dies with a bare IndexError in axis_indices")
     def test_scalar_input_raises_a_clear_error(self, key):
-        with pytest.raises((TypeError, ValueError)):
+        with pytest.raises(ValueError, match="permutation requires an input with at least one axis"):
             nr.permutation(key, 5)
 
 
