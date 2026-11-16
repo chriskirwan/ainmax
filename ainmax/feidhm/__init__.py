@@ -282,7 +282,7 @@ from ainmax._src.feidhm.ufuncs import (
     wrap_elementwise_binary_op as wrap_elementwise_binary_op,
     wrap_elementwise_unary_op as wrap_elementwise_unary_op,
 )
-from ainmax.feidhm import linalg as linalg
+from ainmax.feidhm import linalg as linalg, signal as signal
 
 
 register_namedarray_methods()
