@@ -209,6 +209,20 @@ class TestBroadcastArrays:
         assert jnp.array_equal(res_a.array, expected_a)
         assert jnp.array_equal(res_b.array, expected_b)
 
+    def test_broadcast_shapes_follow_array_api_right_alignment_for_anonymous_axes(self):
+        assert broadcast_shapes((Axis(2), Axis(3), Axis(1)), (Axis(3),)) == (Axis(2), Axis(3), Axis(3))
+
+    def test_broadcasts_purely_anonymous_axes_by_position(self):
+        a = array(jnp.arange(2 * 3 * 1).reshape((2, 3, 1)), (Axis(2), Axis(3), Axis(1)))
+        b = array(jnp.arange(3), (Axis(3),))
+
+        res_a, res_b = broadcast_arrays(a, b)
+
+        assert res_a.axes == (Axis(2), Axis(3), Axis(3))
+        assert res_b.axes == (Axis(2), Axis(3), Axis(3))
+        assert jnp.array_equal(res_a.array, jnp.broadcast_to(a.array, (2, 3, 3)))
+        assert jnp.array_equal(res_b.array, jnp.broadcast_to(b.array, (2, 3, 3)))
+
     def test_incompatible_axis_sizes_raises_value_error(self):
         a = ones(Axis(4, "x"))
         b = ones(Axis(8, "x"))
