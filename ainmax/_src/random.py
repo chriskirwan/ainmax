@@ -612,7 +612,8 @@ def double_sided_maxwell(
     """Double-sided Maxwell samples."""
 
     def draw(s, sh, loc_, scale_):
-        return jax.random.double_sided_maxwell(key, loc_, scale_, s, dtype)
+        standard = jax.random.double_sided_maxwell(key, 0.0, 1.0, s, dtype)
+        return loc_ + scale_ * standard
 
     return _sample("double_sided_maxwell", draw, shape, (loc, scale), None)
 
@@ -794,6 +795,8 @@ def choice(
     supported because it would have no axis name; pass `named.arange(...)` instead.
     """
     a = ensure_named("choice", a)
+    if not a.axes:
+        raise ValueError("choice requires an input with at least one axis")
     (pos,) = axis_indices(a.axes, axis)
     shape_axes = axis_shape_to_tuple(shape)
     out_axes = (*a.axes[:pos], *shape_axes, *a.axes[pos + 1 :])
@@ -816,6 +819,8 @@ def permutation(
 ) -> NamedArray:
     """Randomly permute `x` along `axis` (independently along every other axis if `independent`)."""
     x = ensure_named("permutation", x)
+    if not x.axes:
+        raise ValueError("permutation requires an input with at least one axis")
     (pos,) = axis_indices(x.axes, axis)
 
     def draw(sh):
