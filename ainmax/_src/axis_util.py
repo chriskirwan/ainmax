@@ -556,6 +556,6 @@ def replace_axes(axes: Sequence[Axis], old: AxisSelection | None, new: AxisShape
     return tuple(axes_list)
 
 
-def make_axes(**kwargs: int):
-    """Construct named axes from keyword arguments."""
-    return tuple(Axis(size, name) for name, size in kwargs.items())
+def make_axes(axis_sizes: Sequence[int], axis_names: Sequence[str | None]) -> tuple[Axis, ...]:
+    axes = (Axis(sz, nm) for sz, nm in zip(axis_sizes, axis_names, strict=True))
+    return tuple(axes)

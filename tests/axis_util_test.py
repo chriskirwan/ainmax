@@ -599,12 +599,12 @@ class TestUnresolvedSelectorRaises:
 
 
 class TestMakeAxes:
-    def test_builds_named_axes_from_kwargs(self):
-        assert make_axes(x=4, y=8) == (Axis(4, "x"), Axis(8, "y"))
+    def test_builds_named_axes_from_sequences(self):
+        sizes = (4, 8)
+        names = ("x", "y")
+        assert make_axes(sizes, names) == (Axis(4, "x"), Axis(8, "y"))
 
-    def test_empty_kwargs(self):
-        assert make_axes() == ()
-
-    def test_preserves_kwarg_order(self):
-        result = make_axes(z=1, a=2)
-        assert axis_names(result) == ("z", "a")
+    def test_builds_anonymous_axis(self):
+        sizes = (4, 8)
+        names = (None, "y")
+        assert make_axes(sizes, names) == (Axis(4), Axis(8, "y"))
