@@ -1084,7 +1084,7 @@ def hyp2f1(a: NamedArrayLike, b: NamedArrayLike, c: NamedArrayLike, x: NamedArra
         and ``x``.
     """
     (a, b, c, x), shape = operations.broadcast_arrays_and_shape(a, b, c, x)
-    jax_hyp2f1 = jspecial.hyp2f1(a.array, b.array, x.array)
+    jax_hyp2f1 = jspecial.hyp2f1(a.array, b.array, c.array, x.array)
 
     return constructors.array(jax_hyp2f1, shape)
 
