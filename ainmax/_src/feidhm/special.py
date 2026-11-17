@@ -875,7 +875,6 @@ def sph_harm_y(
     m: NamedArrayLike,
     theta: NamedArrayLike,
     phi: NamedArrayLike,
-    diff_n: int | None = None,
     n_max: int | None = None,
 ) -> NamedArray:
     r"""Compute spherical harmonics of degree ``n`` and order ``m``.
@@ -892,7 +891,6 @@ def sph_harm_y(
         m: Order of the harmonic. Integer-valued, with ``|m| <= n``.
         theta: Polar angle in radians, in the range ``[0, pi]``.
         phi: Azimuthal angle in radians, in the range ``[0, 2 * pi]``.
-        diff_n: Optional static derivative order, forwarded to JAX.
         n_max: Optional static upper bound on the degree ``n``, forwarded to JAX. Must be at least ``max(n)``.
 
     Returns:
@@ -902,7 +900,7 @@ def sph_harm_y(
     n, m, theta, phi = util.ensure_named("sph_harm_y", n, m, theta, phi)
     (n_arr, m_arr, theta_arr, phi_arr), axes = operations.broadcast_arrays_and_shape(n, m, theta, phi)
     return constructors.array(
-        jspecial.sph_harm_y(n_arr.array, m_arr.array, theta_arr.array, phi_arr.array, diff_n=diff_n, n_max=n_max), axes
+        jspecial.sph_harm_y(n_arr.array, m_arr.array, theta_arr.array, phi_arr.array, n_max=n_max), axes
     )
 
 
