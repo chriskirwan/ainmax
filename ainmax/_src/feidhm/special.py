@@ -248,14 +248,14 @@ def gammaincc(a: NamedArrayLike, x: NamedArrayLike) -> NamedArray:
     return ufuncs.wrap_elementwise_binary_op(jspecial.gammaincc)(a, x)
 
 
-def gammaincinv(a: NamedArrayLike, x: NamedArrayLike) -> NamedArray:
+def gammaincinv(a: NamedArrayLike, y: NamedArrayLike) -> NamedArray:
     r"""Compute the inverse regularized lower incomplete gamma function.
 
     Returns the value :math:`z` such that :math:`P(a, z) = x`, where :math:`P` is :func:`gammainc`.
 
     Args:
         a: Shape parameter. Real-valued and positive.
-        x: Target value of :math:`P(a, \cdot)`. Real-valued, in the range ``[0, 1]``.
+        y: Target value of :math:`P(a, \cdot)`. Real-valued, in the range ``[0, 1]``.
 
     Returns:
         A ``NamedArray`` containing the inverse, broadcast to the common axes of ``a`` and ``x``.
@@ -265,10 +265,10 @@ def gammaincinv(a: NamedArrayLike, x: NamedArrayLike) -> NamedArray:
     """
     if not hasattr(jspecial, "gammaincinv"):
         raise NotImplementedError("jax.scipy.special.gammaincinv is not available in JAX")
-    return ufuncs.wrap_elementwise_binary_op(jspecial.gammaincinv)(a, x)
+    return ufuncs.wrap_elementwise_binary_op(jspecial.gammaincinv)(a, y)
 
 
-def gammainccinv(a: NamedArrayLike, x: NamedArrayLike) -> NamedArray:
+def gammainccinv(a: NamedArrayLike, y: NamedArrayLike) -> NamedArray:
     r"""Compute the inverse regularized upper incomplete gamma function.
 
     Returns the value :math:`z` such that :math:`Q(a, z) = x`, where :math:`Q` is :func:`gammaincc`.
@@ -285,7 +285,7 @@ def gammainccinv(a: NamedArrayLike, x: NamedArrayLike) -> NamedArray:
     """
     if not hasattr(jspecial, "gammainccinv"):
         raise NotImplementedError("jax.scipy.special.gammainccinv is not available in JAX")
-    return ufuncs.wrap_elementwise_binary_op(jspecial.gammainccinv)(a, x)
+    return ufuncs.wrap_elementwise_binary_op(jspecial.gammainccinv)(a, y)
 
 
 def erf(x: NamedArrayLike) -> NamedArray:
@@ -824,7 +824,7 @@ def i1(x: NamedArrayLike) -> NamedArray:
     return ufuncs.wrap_elementwise_unary_op(jspecial.i1)(x)
 
 
-def bessel_jn(z: NamedArrayLike, *, v: int, n_iter: int = 50) -> NamedArray:
+def bessel_jn(z: NamedArrayLike, axis: AxisLike, *, v: int, n_iter: int = 50) -> NamedArray:
     r"""Compute the Bessel functions of the first kind for all integer orders up to ``v``.
 
     .. math::
@@ -844,7 +844,9 @@ def bessel_jn(z: NamedArrayLike, *, v: int, n_iter: int = 50) -> NamedArray:
         A ``NamedArray`` containing :math:`J_0(z), \dots, J_v(z)`.
     """
     z = util.ensure_named("bessel_jn", z)
-    return constructors.array(jspecial.bessel_jn(z.array, v=v, n_iter=n_iter), z.axes)
+    out_axis = util.resolve_new_axis(axis, v + 1, "bernoulli", "axis")
+
+    return constructors.array(jspecial.bessel_jn(z.array, v=v, n_iter=n_iter), (out_axis, *z.axes))
 
 
 # Legendre and spherical harmonics
@@ -873,7 +875,6 @@ def sph_harm_y(
     m: NamedArrayLike,
     theta: NamedArrayLike,
     phi: NamedArrayLike,
-    diff_n: int | None = None,
     n_max: int | None = None,
 ) -> NamedArray:
     r"""Compute spherical harmonics of degree ``n`` and order ``m``.
@@ -890,7 +891,6 @@ def sph_harm_y(
         m: Order of the harmonic. Integer-valued, with ``|m| <= n``.
         theta: Polar angle in radians, in the range ``[0, pi]``.
         phi: Azimuthal angle in radians, in the range ``[0, 2 * pi]``.
-        diff_n: Optional static derivative order, forwarded to JAX.
         n_max: Optional static upper bound on the degree ``n``, forwarded to JAX. Must be at least ``max(n)``.
 
     Returns:
@@ -900,7 +900,7 @@ def sph_harm_y(
     n, m, theta, phi = util.ensure_named("sph_harm_y", n, m, theta, phi)
     (n_arr, m_arr, theta_arr, phi_arr), axes = operations.broadcast_arrays_and_shape(n, m, theta, phi)
     return constructors.array(
-        jspecial.sph_harm_y(n_arr.array, m_arr.array, theta_arr.array, phi_arr.array, diff_n=diff_n, n_max=n_max), axes
+        jspecial.sph_harm_y(n_arr.array, m_arr.array, theta_arr.array, phi_arr.array, n_max=n_max), axes
     )
 
 
@@ -1084,7 +1084,7 @@ def hyp2f1(a: NamedArrayLike, b: NamedArrayLike, c: NamedArrayLike, x: NamedArra
         and ``x``.
     """
     (a, b, c, x), shape = operations.broadcast_arrays_and_shape(a, b, c, x)
-    jax_hyp2f1 = jspecial.hyp2f1(a.array, b.array, x.array)
+    jax_hyp2f1 = jspecial.hyp2f1(a.array, b.array, c.array, x.array)
 
     return constructors.array(jax_hyp2f1, shape)
 
