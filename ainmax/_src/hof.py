@@ -10,11 +10,8 @@ import jax.numpy as jnp
 from ainmax._src.axis import Axis, AxisSelection
 from ainmax._src.axis_util import axis_index, axis_selection_to_tuple, check_unique_axis_names
 from ainmax._src.feidhm import array, transpose
+from ainmax._src.filters import is_named_array
 from ainmax._src.typing import NamedArray
-
-
-def _is_named(x):
-    return isinstance(x, NamedArray)
 
 
 def _resolve_positions(leaf: NamedArray, refs) -> tuple[int | None, ...]:
@@ -59,7 +56,7 @@ def _unify_mapped_axes(leaves, all_positions, refs) -> tuple[Axis, ...]:
     missing = [refs[k] for k, m in enumerate(mapped) if m is None]
     if missing:
         raise ValueError(f"vmap: no argument has axis {missing}")
-    return tuple(mapped)  # type: ignore[arg-type]
+    return tuple(mapped)  # pyrefly: ignore[bad-return]
 
 
 def vmap[F: Callable](fn: F, in_axes: AxisSelection, out_axes: AxisSelection | None = None) -> F:
@@ -82,10 +79,10 @@ def vmap[F: Callable](fn: F, in_axes: AxisSelection, out_axes: AxisSelection | N
 
     @wraps(fn)
     def wrapped(*args, **kwargs):
-        leaves, treedef = jax.tree.flatten((args, kwargs), is_leaf=_is_named)
-        positions = [_resolve_positions(l, refs) if _is_named(l) else None for l in leaves]
+        leaves, treedef = jax.tree.flatten((args, kwargs), is_leaf=is_named_array)
+        positions = [_resolve_positions(l, refs) if is_named_array(l) else None for l in leaves]
         mapped = _unify_mapped_axes(leaves, positions, refs)
-        raw_leaves = [l.array if _is_named(l) else l for l in leaves]
+        raw_leaves = [l.array if is_named_array(l) else l for l in leaves]
         out_cell: list = []
 
         def core(*raw):
@@ -97,9 +94,9 @@ def vmap[F: Callable](fn: F, in_axes: AxisSelection, out_axes: AxisSelection | N
                 drop = {p for p in pos if p is not None}
                 rebuilt.append(array(r, tuple(a for i, a in enumerate(leaf.axes) if i not in drop)))
             a, kw = jax.tree.unflatten(treedef, rebuilt)
-            out_leaves, out_def = jax.tree.flatten(fn(*a, **kw), is_leaf=_is_named)
-            out_cell[:] = [out_def, [o.axes if _is_named(o) else None for o in out_leaves]]
-            return [o.array if _is_named(o) else o for o in out_leaves]
+            out_leaves, out_def = jax.tree.flatten(fn(*a, **kw), is_leaf=is_named_array)
+            out_cell[:] = [out_def, [o.axes if is_named_array(o) else None for o in out_leaves]]
+            return [o.array if is_named_array(o) else o for o in out_leaves]
 
         f = core
         for k in reversed(range(len(refs))):
@@ -118,15 +115,15 @@ def vmap[F: Callable](fn: F, in_axes: AxisSelection, out_axes: AxisSelection | N
         out = jax.tree.unflatten(out_def, wrapped_out)
 
         if out_axes is not None:
-            out = jax.tree.map(lambda l: transpose(l, out_axes) if _is_named(l) else l, out, is_leaf=_is_named)
+            out = jax.tree.map(
+                lambda l: transpose(l, out_axes) if is_named_array(l) else l, out, is_leaf=is_named_array
+            )
         return out
 
     return cast(F, wrapped)
 
 
-# --------------------------------------------------------------------------------------------------------------------
 # scan / fold
-# --------------------------------------------------------------------------------------------------------------------
 
 CheckpointPolicy = Callable[..., bool]
 """A `jax.checkpoint_policies.*` policy (or any callable accepted by `jax.checkpoint(policy=...)`)."""
@@ -227,7 +224,7 @@ def _is_staged(x) -> bool:
 
 
 def _stage(leaf) -> _Staged:
-    if _is_named(leaf):
+    if is_named_array(leaf):
         return _Staged(leaf.array, leaf.axes)
     leaf = jnp.asarray(leaf)
     return _Staged(leaf, tuple(Axis(s) for s in leaf.shape))
@@ -271,15 +268,15 @@ def scan(
 
     @wraps(fn)
     def wrapped(init, *args, **kwargs):
-        leaves, treedef = jax.tree.flatten((args, kwargs), is_leaf=_is_named)
-        positions = [_resolve_positions(l, refs) if _is_named(l) else None for l in leaves]
+        leaves, treedef = jax.tree.flatten((args, kwargs), is_leaf=is_named_array)
+        positions = [_resolve_positions(l, refs) if is_named_array(l) else None for l in leaves]
         scanned = [i for i, p in enumerate(positions) if p is not None and p[0] is not None]
         if scanned:
             (mapped,) = _unify_mapped_axes(leaves, positions, refs)
         elif isinstance(ref, Axis):
             mapped = ref
         else:
-            raise ValueError(f"scan: no argument has axis {ref!r}; pass an `Axis` to scan without inputs")
+            raise ValueError(f"no argument has axis {ref}; pass an `Axis` to scan without inputs")
 
         xs = []
         for i in scanned:
@@ -296,7 +293,7 @@ def scan(
                 rebuilt[i] = array(x, leaf.axes[:p] + leaf.axes[p + 1 :])
             a, kw = jax.tree.unflatten(treedef, rebuilt)
             carry, y = fn(carry, *a, **kw)
-            return carry, jax.tree.map(_stage, y, is_leaf=_is_named)
+            return carry, jax.tree.map(_stage, y, is_leaf=is_named_array)
 
         policy = _as_policy(remat)
         if block_size is not None:
@@ -314,7 +311,7 @@ def scan(
 
         ys = jax.tree.map(finish, ys, is_leaf=_is_staged)
         if out_axes is not None:
-            ys = jax.tree.map(lambda l: transpose(l, out_axes) if _is_named(l) else l, ys, is_leaf=_is_named)
+            ys = jax.tree.map(lambda l: transpose(l, out_axes) if is_named_array(l) else l, ys, is_leaf=is_named_array)
         return carry, ys
 
     return wrapped
