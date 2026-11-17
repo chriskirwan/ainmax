@@ -18,7 +18,6 @@ from ainmax._src.axis_util import (
     match_axes,
     remove_axes,
     resolve_axes,
-    validate_unique_axes,
 )
 from ainmax._src.feidhm import constructors, reductions, ufuncs, util
 from ainmax._src.partition import ShardingLike
@@ -106,7 +105,6 @@ def ndim(x: NamedArrayLike) -> int:
 # Broadcasting
 
 
-@validate_unique_axes(arg_names=("shape",))
 def broadcast_to(
     a: NamedArrayLike,
     shape: AxisShape,
@@ -175,12 +173,10 @@ def broadcast_to(
         array = named.array
 
     jax_array = jax.lax.broadcast_in_dim(
-        array,
-        target_sizes,
-        broadcast_dimensions=broadcast_dimensions,
+        array, target_sizes, broadcast_dimensions=broadcast_dimensions, out_sharding=jax_sharding
     )
 
-    return constructors.array(jax_array, target, out_sharding=out_sharding)
+    return constructors.array(jax_array, target)
 
 
 def broadcast_arrays_and_shape(
