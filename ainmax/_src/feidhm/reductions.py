@@ -57,6 +57,7 @@ def wrap_reduction_call(
     single_axis_only: bool = False,
     supports_where: bool = True,
     supports_initial: bool = False,
+    named_array_kwargs: tuple[str, ...] = (),
 ) -> Callable:
     """
     Wraps a reduction function to support NamedArray and apply common checks.
@@ -67,6 +68,7 @@ def wrap_reduction_call(
                           along a single axis for NamedArray inputs.
         supports_where: If False, a ValueError will be raised if 'where' is provided.
         supports_initial: If False, a ValueError will be raised if 'initial' is provided.
+        named_array_kwargs: Keyword arguments that accept additional NamedArrayLike operands.
 
     Returns:
         A wrapped function that can be called with NamedArray or standard array inputs.
@@ -83,6 +85,15 @@ def wrap_reduction_call(
             where = util.ensure_named(f"{getattr(fn, '__name__', 'function')}", where)
 
         named = util.ensure_named(f"{fn}", a)
+        array_kwargs = tuple(name for name in named_array_kwargs if kwargs.get(name) is not None)
+        if array_kwargs:
+            named_arrays = util.ensure_named_tuple(
+                getattr(fn, "__name__", "function"), tuple(kwargs[name] for name in array_kwargs)
+            )
+            broadcasted, _ = operations.broadcast_arrays_and_shape(named, *named_arrays)
+            named, *broadcasted_kwargs = broadcasted
+            kwargs.update({name: value.array for name, value in zip(array_kwargs, broadcasted_kwargs, strict=True)})
+
         return _reduce_one_leaf(
             fn, named, axis, initial, where, single_axis_only, supports_where, supports_initial, **kwargs
         )
