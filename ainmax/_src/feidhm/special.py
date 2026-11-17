@@ -824,7 +824,7 @@ def i1(x: NamedArrayLike) -> NamedArray:
     return ufuncs.wrap_elementwise_unary_op(jspecial.i1)(x)
 
 
-def bessel_jn(z: NamedArrayLike, *, v: int, n_iter: int = 50) -> NamedArray:
+def bessel_jn(z: NamedArrayLike, axis: AxisLike, *, v: int, n_iter: int = 50) -> NamedArray:
     r"""Compute the Bessel functions of the first kind for all integer orders up to ``v``.
 
     .. math::
@@ -844,7 +844,9 @@ def bessel_jn(z: NamedArrayLike, *, v: int, n_iter: int = 50) -> NamedArray:
         A ``NamedArray`` containing :math:`J_0(z), \dots, J_v(z)`.
     """
     z = util.ensure_named("bessel_jn", z)
-    return constructors.array(jspecial.bessel_jn(z.array, v=v, n_iter=n_iter), z.axes)
+    out_axis = util.resolve_new_axis(axis, v + 1, "bernoulli", "axis")
+
+    return constructors.array(jspecial.bessel_jn(z.array, v=v, n_iter=n_iter), (out_axis, *z.axes))
 
 
 # Legendre and spherical harmonics
