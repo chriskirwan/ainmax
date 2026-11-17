@@ -22,7 +22,7 @@ Primitive Irish · From Proto-Celtic anman, meaning "name"; ancestor of Old Iris
 
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![JAX](https://img.shields.io/badge/powered%20by-JAX-8A2BE2)](https://github.com/jax-ml/jax)
-[![Documentation](https://img.shields.io/badge/docs-online-blue)](DOCUMENTATION_URL)
+<!-- [![Documentation](https://img.shields.io/badge/docs-online-blue)](DOCUMENTATION_URL) -->
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 </div>
@@ -36,10 +36,12 @@ By combining explicit array semantics with JAX's compilation, automatic differen
 
 - **Named arrays** — Multidimensional arrays with explicit semantic axes, making complex tensor operations easier to express and reason about.
 - **Numerical computing** — A collection of composable array operations, linear algebra, and scientific computing utilities.
-- **Lie groups and algebras** — Mathematical abstractions for structured spaces and transformations.
 - **JAX integration** — Automatic differentiation, compilation, vectorisation, and accelerator execution.
 - **Scalable computation** — Foundations for distributed and multi-device numerical workloads.
 
 ## Installation
 
 Requires Python 3.12 or later.
+
+## Acknowledgements
+Significantly inspired by `haliax`, development of which is now moved to [marin](https://github.com/marin-community/marin)

@@ -1,6 +1,6 @@
 [project]
 name = "ainmax"
-version = "0.0.1"
+version = "0.1.0"
 description = "Scientific computing in JAX with named arrays"
 readme = "README.md"
 requires-python = ">=3.12"
