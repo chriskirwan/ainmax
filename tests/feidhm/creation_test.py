@@ -24,7 +24,7 @@ from ainmax._src.feidhm.creation import (
     zeros,
     zeros_like,
 )
-from ainmax._src.partition import PM
+from ainmax._src.sharding.partition import PM
 from hypothesis import given, strategies as st
 from jax.sharding import SingleDeviceSharding
 from strategies import disjoint_named_axis_tuples, named_array_and_axis_pair, named_arrays

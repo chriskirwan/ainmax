@@ -31,7 +31,7 @@ from ainmax._src.axis import Axis
 from ainmax._src.axis_util import axis_indices
 from ainmax._src.feidhm.constructors import array
 from ainmax._src.feidhm.operations import transpose
-from ainmax._src.partition import PM
+from ainmax._src.sharding import PM
 from hypothesis import given, settings, strategies as st
 from jax import NamedSharding, P
 from jax.scipy.special import erf
