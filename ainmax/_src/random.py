@@ -10,7 +10,7 @@ from jaxtyping import Key
 from ainmax._src.axis import AxisSelection, AxisSelector, AxisShape
 from ainmax._src.axis_util import axis_indices, axis_shape_to_tuple, axis_sizes, remove_axes
 from ainmax._src.feidhm import array, broadcast_shapes, broadcast_to, ensure_named, ensure_named_tuple, transpose
-from ainmax._src.sharding import canonicalize_sharding, ShardingLike
+from ainmax._src.sharding import resolve_sharding, ShardingLike
 from ainmax._src.typing import NamedArray, NamedArrayLike
 from ainmax._src.util import default_floating_dtype
 
@@ -21,7 +21,7 @@ IntNamedArrayLike = NamedArrayLike
 
 
 def resolve_shardings_for_samplers(shape, out_sharding, name):
-    out_sharding = canonicalize_sharding(shape, out_sharding, name)
+    out_sharding = resolve_sharding(shape, out_sharding, name)
     cur_mesh = get_abstract_mesh()
     if cur_mesh.are_all_axes_explicit and out_sharding is None and not shape:
         # when shape is empty i.e. scalar, we can choose a replicated sharding.

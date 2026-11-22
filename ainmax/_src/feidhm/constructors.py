@@ -7,8 +7,7 @@ from jax.typing import DTypeLike
 from ainmax._src.array import NamedArrayImpl
 from ainmax._src.axis import AxisShape
 from ainmax._src.axis_util import axis_shape_to_tuple
-from ainmax._src.partition import ShardingLike
-from ainmax._src.sharding import canonicalize_sharding
+from ainmax._src.sharding import resolve_sharding, ShardingLike
 from ainmax._src.typing import NamedArray
 
 
@@ -43,7 +42,7 @@ def array(
     """
 
     axis_shape = axis_shape_to_tuple(shape)
-    jax_sharding = canonicalize_sharding(axis_shape, out_sharding, "array")
+    jax_sharding = resolve_sharding(axis_shape, out_sharding, "array")
 
     jax_array = jnp.asarray(a, dtype, copy=copy, device=device, out_sharding=jax_sharding)
     return NamedArrayImpl(jax_array, axis_shape)

@@ -10,7 +10,7 @@ from jaxtyping import ScalarLike
 
 from ainmax._src.axis import Axis, AxisLike, AxisSelection, AxisSelector, AxisShape
 from ainmax._src.feidhm import indexing, tensor_contractions
-from ainmax._src.partition import ShardingLike
+from ainmax._src.sharding import ShardingLike
 
 class NamedArray:
     array: Array

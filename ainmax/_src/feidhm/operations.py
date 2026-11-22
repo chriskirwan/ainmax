@@ -20,8 +20,7 @@ from ainmax._src.axis_util import (
     resolve_axes,
 )
 from ainmax._src.feidhm import constructors, reductions, ufuncs, util
-from ainmax._src.partition import ShardingLike
-from ainmax._src.sharding import canonicalize_sharding
+from ainmax._src.sharding import resolve_sharding, ShardingLike
 from ainmax._src.typing import NamedArray, NamedArrayLike
 
 
@@ -148,11 +147,7 @@ def broadcast_to(
             raise ValueError(f"Cannot broadcast axis {src_ax.name!r} of size {src_ax.size} to {tgt_ax.size}")
 
     target_sizes = axis_sizes(target)
-    jax_sharding = canonicalize_sharding(
-        target,
-        out_sharding,
-        "broadcast_to",
-    )
+    jax_sharding = resolve_sharding(target, out_sharding, "broadcast_to")
 
     if named.array.ndim == 0:
         jax_array = jnp.broadcast_to(named.array, target_sizes, out_sharding=jax_sharding)
@@ -282,7 +277,7 @@ def reshape(a: NamedArrayLike, shape: AxisShape, *, out_sharding: ShardingLike |
     if prod(shape_sizes) != a.size:
         raise ValueError()
 
-    jax_sharding = canonicalize_sharding(shape_tuple, out_sharding, "reshape")
+    jax_sharding = resolve_sharding(shape_tuple, out_sharding, "reshape")
     jax_array = jnp.reshape(a.array, shape_sizes, out_sharding=jax_sharding)
 
     return constructors.array(jax_array, shape_tuple)
@@ -902,7 +897,7 @@ def repeat(
         raise ValueError("repeat: the result would have a zero-size axis, which `Axis` does not support")
 
     out_axes = tuple(ax.resize(out_size) if i == idx else ax for i, ax in enumerate(named.axes))
-    jax_sharding = canonicalize_sharding(out_axes, out_sharding, "repeat")
+    jax_sharding = resolve_sharding(out_axes, out_sharding, "repeat")
     jax_array = jnp.repeat(
         named.array,
         repeats.array,

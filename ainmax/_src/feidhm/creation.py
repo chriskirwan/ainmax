@@ -19,8 +19,7 @@ from ainmax._src.axis_util import (
     check_unique_axis_names,
 )
 from ainmax._src.feidhm import constructors, util
-from ainmax._src.partition import ShardingLike
-from ainmax._src.sharding import canonicalize_sharding
+from ainmax._src.sharding import resolve_sharding, ShardingLike
 from ainmax._src.typing import (
     DuckTypedNamedArray,
     NamedArray,
@@ -51,7 +50,7 @@ def zeros(
     target = axis_shape_to_tuple(shape)
     target_sizes = axis_sizes(target)
 
-    jax_sharding = canonicalize_sharding(target, out_sharding, "full")
+    jax_sharding = resolve_sharding(target, out_sharding, "zeros")
 
     jax_array = jnp.zeros(target_sizes, dtype=dtype, out_sharding=jax_sharding, device=device)
 
@@ -81,7 +80,7 @@ def ones(
     target = axis_shape_to_tuple(shape)
     target_sizes = axis_sizes(target)
 
-    jax_sharding = canonicalize_sharding(target, out_sharding, "full")
+    jax_sharding = resolve_sharding(target, out_sharding, "ones")
 
     jax_array = jnp.ones(target_sizes, dtype=dtype, device=device, out_sharding=jax_sharding)
 
@@ -111,7 +110,7 @@ def empty(
     target = axis_shape_to_tuple(shape)
     target_sizes = axis_sizes(target)
 
-    jax_sharding = canonicalize_sharding(target, out_sharding, "full")
+    jax_sharding = resolve_sharding(target, out_sharding, "empty")
 
     jax_array = jnp.empty(target_sizes, dtype=dtype, device=device, out_sharding=jax_sharding)
 
@@ -144,7 +143,7 @@ def full(
     target = axis_shape_to_tuple(shape)
     target_sizes = axis_sizes(target)
 
-    jax_sharding = canonicalize_sharding(target, out_sharding, "full")
+    jax_sharding = resolve_sharding(target, out_sharding, "full")
 
     if isinstance(fill_value, NamedArray):
         fill_value = fill_value.array
@@ -186,7 +185,7 @@ def zeros_like(
     dtype = prototype.dtype if dtype is None else dtype
     target_shape = axis_shape_to_tuple(prototype.axes if shape is None else shape)
 
-    jax_sharding = canonicalize_sharding(target_shape, out_sharding, "zeros_like")
+    jax_sharding = resolve_sharding(target_shape, out_sharding, "zeros_like")
     jax_array = jnp.zeros_like(
         prototype, shape=axis_sizes(target_shape), dtype=dtype, device=device, out_sharding=jax_sharding
     )
@@ -220,7 +219,7 @@ def ones_like(
     dtype = prototype.dtype if dtype is None else dtype
     target_shape = axis_shape_to_tuple(prototype.axes if shape is None else shape)
 
-    jax_sharding = canonicalize_sharding(target_shape, out_sharding, "zeros_like")
+    jax_sharding = resolve_sharding(target_shape, out_sharding, "zeros_like")
     jax_array = jnp.ones_like(
         prototype, shape=axis_sizes(target_shape), dtype=dtype, device=device, out_sharding=jax_sharding
     )
@@ -291,7 +290,7 @@ def full_like(
     dtype = prototype.dtype if dtype is None else dtype
     target_shape = axis_shape_to_tuple(prototype.axes if shape is None else shape)
 
-    jax_sharding = canonicalize_sharding(target_shape, out_sharding, "zeros_like")
+    jax_sharding = resolve_sharding(target_shape, out_sharding, "zeros_like")
     jax_array = jnp.full_like(
         prototype,
         fill_named.array,
@@ -342,7 +341,7 @@ def iota(
         raise ValueError()
 
     jax_shape = axis_sizes(shape)
-    jax_sharding = canonicalize_sharding(shape, out_sharding, "iota")
+    jax_sharding = resolve_sharding(shape, out_sharding, "iota")
     jax_array = jax.lax.broadcasted_iota(dtype, jax_shape, axis_idx, out_sharding=jax_sharding)
 
     return constructors.array(jax_array, shape)
