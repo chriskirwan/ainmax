@@ -42,11 +42,11 @@ def resolve_sharding(axes: AxisSpec, sharding: ShardingLike | None, fn_name: str
     return partition_spec
 
 
-def _has_pm(sharding: Any) -> bool:
+def has_pm(sharding: Any) -> bool:
     return any(isinstance(leaf, PM) for leaf in jax.tree.leaves(sharding, is_leaf=lambda x: isinstance(x, PM)))
 
 
-def _shape_dtype_struct(tree: PyTree) -> PyTree:
+def shape_dtype_struct(tree: PyTree) -> PyTree:
     """Replace array leaves by ``ShapeDtypeStruct``"""
 
     def leaf(x):
@@ -55,7 +55,7 @@ def _shape_dtype_struct(tree: PyTree) -> PyTree:
     return jax.tree.map(leaf, tree)
 
 
-def _resolve_leaf_sharding(
+def resolve_leaf_sharding(
     fn_name: str, x: PyTree, sharding: Device | ShardingLike | None
 ) -> Device | NamedSharding | P | None:
     """Canonicalize a per-leaf sharding, resolving PM for NamedArray leaves."""
@@ -69,7 +69,7 @@ def _resolve_leaf_sharding(
     return sharding
 
 
-def _flatten_pytree_shardings(
+def flatten_pytree_shardings(
     fn_name: str,
     xs: PyTree,
     shardings: PyTree,
@@ -78,11 +78,11 @@ def _flatten_pytree_shardings(
     for x in flat_xs:
         assert_single_array_leaf(x, fn_name)
     flat_shardings = flatten_axes(fn_name, treedef, shardings)
-    canonical_shardings = [_resolve_leaf_sharding(fn_name, x, shard) for x, shard in zip(flat_xs, flat_shardings)]
+    canonical_shardings = [resolve_leaf_sharding(fn_name, x, shard) for x, shard in zip(flat_xs, flat_shardings)]
     return flat_xs, canonical_shardings, treedef
 
 
 def _map_canonicalized(fn_name: str, xs: PyTree, shardings: PyTree, op: Callable[[Any, Any], Any]) -> PyTree:
-    flat_xs, canonical, treedef = _flatten_pytree_shardings(fn_name, xs, shardings)
+    flat_xs, canonical, treedef = flatten_pytree_shardings(fn_name, xs, shardings)
     flat_out = [op(xi, c) for xi, c in zip(flat_xs, canonical)]
     return jax.tree.unflatten(treedef, flat_out)

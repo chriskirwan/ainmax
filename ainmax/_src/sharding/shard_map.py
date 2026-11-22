@@ -12,7 +12,7 @@ from jaxtyping import PyTree
 from ainmax._src.array import NamedArrayImpl
 from ainmax._src.axis import Axis
 from ainmax._src.filters import is_arrayish, is_named_array
-from ainmax._src.sharding import _flatten_pytree_shardings, _has_pm
+from ainmax._src.sharding import util
 
 
 T = TypeVar("T")
@@ -121,7 +121,7 @@ def shard_map(
             check_vma=check_vma,
         )
 
-    needs_pm_discovery = _has_pm(out_specs)
+    needs_pm_discovery = util.has_pm(out_specs)
 
     def wrapped(*args):
         mesh_ = mesh if mesh is not None else jax.sharding.get_abstract_mesh()
@@ -133,7 +133,7 @@ def shard_map(
         in_arrays = [x.array if is_named_array(x) else x for x in in_flat]
 
         if in_specs is not None:
-            _, in_specs_flat, _ = _flatten_pytree_shardings("shard_map", in_named, in_specs)
+            _, in_specs_flat, _ = util.flatten_pytree_shardings("shard_map", in_named, in_specs)
         else:
             in_specs_flat = [jax.typeof(a).sharding.spec for a in in_arrays]
 
@@ -167,7 +167,7 @@ def shard_map(
                 for s, axes in zip(local_shapes, captured["axes"], strict=True)
             ]
             meta_tree = jax.tree.unflatten(captured["treedef"], meta)
-            _, out_specs_flat, _ = _flatten_pytree_shardings("shard_map", meta_tree, out_specs)
+            _, out_specs_flat, _ = util.flatten_pytree_shardings("shard_map", meta_tree, out_specs)
             resolved_out_specs = list(out_specs_flat)
         else:
             resolved_out_specs = out_specs
@@ -191,7 +191,7 @@ def shard_map(
                 for arr, axes in zip(raw_out, out_axes, strict=True)
             ]
             meta_tree = jax.tree.unflatten(out_treedef, meta)
-            _, flat_out_specs, _ = _flatten_pytree_shardings("shard_map", meta_tree, out_specs)
+            _, flat_out_specs, _ = util.flatten_pytree_shardings("shard_map", meta_tree, out_specs)
         rebuilt = [
             NamedArrayImpl(arr, _resize_axes(axes, spec, sizes, "global")) if axes is not None else arr
             for arr, axes, spec in zip(raw_out, out_axes, flat_out_specs, strict=True)

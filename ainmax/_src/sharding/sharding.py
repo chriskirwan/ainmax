@@ -88,13 +88,13 @@ def auto_mesh_axes(fn: Callable[..., Any], out_sharding: partition.ShardingLike 
     if out_sharding is None:
         return f
 
-    if not util._has_pm(out_sharding):
+    if not util.has_pm(out_sharding):
         return jax.sharding.auto_axes(f, out_sharding=out_sharding)
 
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        out_shape = jax.eval_shape(f, *util._shape_dtype_struct(args), **util._shape_dtype_struct(kwargs))
-        _, resolved, treedef = util._flatten_pytree_shardings("auto_mesh", out_shape, out_sharding)
+        out_shape = jax.eval_shape(f, *util.shape_dtype_struct(args), **util.shape_dtype_struct(kwargs))
+        _, resolved, treedef = util.flatten_pytree_shardings("auto_mesh", out_shape, out_sharding)
         shardings = jax.tree.unflatten(treedef, resolved)
         return jax.sharding.auto_axes(f, out_sharding=shardings)(*args, **kwargs)
 
