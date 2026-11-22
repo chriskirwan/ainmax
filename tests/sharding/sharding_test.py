@@ -31,11 +31,11 @@ import pytest
 from ainmax._src.array import NamedArrayImpl
 from ainmax._src.axis import AxisShape
 from ainmax._src.axis_util import axis_shape_to_tuple, axis_sizes
-from ainmax._src.partition import PM
 from ainmax._src.sharding import (
     auto_mesh_axes,
     canonicalize_sharding,
     device_put,
+    PM,
     reshard,
     with_sharding_constraint,
 )

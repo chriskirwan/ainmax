@@ -1,5 +1,5 @@
 from ainmax._src.axis import Axis
-from ainmax._src.partition import PM
+from ainmax._src.sharding.partition import PM
 from hypothesis import given, strategies as st
 from jax import P
 from strategies import (
