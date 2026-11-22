@@ -1,4 +1,4 @@
-from ainmax import feidhm as feidhm, random as random, typing as typing
+from ainmax import feidhm as feidhm, random as random, sharding as sharding, typing as typing
 from ainmax._src.axis import Axis as Axis
 from ainmax._src.axis_util import (
     axis_index as axis_index,
@@ -39,5 +39,4 @@ from ainmax._src.filters import (
     is_scalar as is_scalar,
 )
 from ainmax._src.hof import fold as fold, scan as scan, vmap as vmap
-from ainmax._src.partition import PM as PM
 from ainmax._src.typing import NamedArray as NamedArray, NamedArrayLike as NamedArrayLike
