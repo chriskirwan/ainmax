@@ -13,7 +13,7 @@ from ainmax._src.feidhm.tensor_contractions import (
     trace,
     vecdot,
 )
-from ainmax._src.partition import PM
+from ainmax._src.sharding.partition import PM
 from hypothesis import given, strategies as st
 from jax import P
 

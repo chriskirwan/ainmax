@@ -7,7 +7,7 @@ code:
   several *simulated* CPU devices (`--xla_force_host_platform_device_count`),
   so the "resolve a `PM` against the current mesh, inside a mesh context"
   path is exercised for real rather than only mocked.
-- The pure control-flow branches of `canonicalize_sharding` (unsupported
+- The pure control-flow branches of `resolve_sharding` (unsupported
   types, the "you're not inside a mesh" error, an unresolved logical axis)
   don't need real devices at all, so those are tested by monkeypatching
   `jax.sharding.get_abstract_mesh` directly -- this is both faster and lets
@@ -31,12 +31,12 @@ import pytest
 from ainmax._src.array import NamedArrayImpl
 from ainmax._src.axis import AxisShape
 from ainmax._src.axis_util import axis_shape_to_tuple, axis_sizes
-from ainmax._src.partition import PM
 from ainmax._src.sharding import (
     auto_mesh_axes,
-    canonicalize_sharding,
     device_put,
+    PM,
     reshard,
+    resolve_sharding,
     with_sharding_constraint,
 )
 from jax import NamedSharding, P
@@ -59,23 +59,23 @@ def _dummy_contract(a, b):
 
 class TestCanonicalizeSharding:
     def test_none_passes_through(self):
-        assert canonicalize_sharding(("batch",), None, "some_fn") is None
+        assert resolve_sharding(("batch",), None, "some_fn") is None
 
     def test_partition_spec_passes_through_unchanged(self):
         spec = P("data")
-        assert canonicalize_sharding(("batch",), spec, "some_fn") is spec
+        assert resolve_sharding(("batch",), spec, "some_fn") is spec
 
     def test_named_sharding_passes_through_unchanged(self, mesh_1d):
         sharding = NamedSharding(mesh_1d, P("x"))
-        assert canonicalize_sharding(("batch",), sharding, "some_fn") is sharding
+        assert resolve_sharding(("batch",), sharding, "some_fn") is sharding
 
     def test_unsupported_type_raises_type_error_naming_the_caller(self):
         with pytest.raises(TypeError, match="some_fn"):
-            canonicalize_sharding(("batch",), object(), "some_fn")
+            resolve_sharding(("batch",), object(), "some_fn")
 
     def test_unsupported_type_error_names_the_supported_types(self):
         with pytest.raises(TypeError, match="NamedSharding|PartitionSpec|PM"):
-            canonicalize_sharding(("batch",), 42, "some_fn")
+            resolve_sharding(("batch",), 42, "some_fn")
 
     def test_pm_outside_mesh_context_raises(self, monkeypatch):
         mock_mesh = MagicMock()
@@ -84,7 +84,7 @@ class TestCanonicalizeSharding:
 
         pm = PM({"batch": "data"})
         with pytest.raises(ValueError, match="mesh"):
-            canonicalize_sharding(("batch",), pm, "some_fn")
+            resolve_sharding(("batch",), pm, "some_fn")
 
     def test_unmapped_logical_axis_resolves_to_none(self, monkeypatch):
         mock_mesh = MagicMock()
@@ -92,7 +92,7 @@ class TestCanonicalizeSharding:
         monkeypatch.setattr(jax.sharding, "get_abstract_mesh", lambda: mock_mesh)
 
         pm = PM({"batch": "data"})
-        assert canonicalize_sharding(("unmapped_axis",), pm, "some_fn") == P(None)
+        assert resolve_sharding(("unmapped_axis",), pm, "some_fn") == P(None)
 
     def test_fully_mapped_pm_resolves_to_partition_spec(self, monkeypatch):
         mock_mesh = MagicMock()
@@ -100,12 +100,12 @@ class TestCanonicalizeSharding:
         monkeypatch.setattr(jax.sharding, "get_abstract_mesh", lambda: mock_mesh)
 
         pm = PM({"batch": "data"})
-        assert canonicalize_sharding(("batch",), pm, "some_fn") == P("data")
+        assert resolve_sharding(("batch",), pm, "some_fn") == P("data")
 
     def test_pm_resolved_inside_a_real_mesh_context(self, mesh_1d):
         pm = PM({"batch": "x"})
         with jax.set_mesh(mesh_1d):
-            result = canonicalize_sharding(("batch",), pm, "some_fn")
+            result = resolve_sharding(("batch",), pm, "some_fn")
         assert result == P("x")
 
 
@@ -117,7 +117,7 @@ class TestAutoMeshAxes:
         def fn(x, *, scale):
             return x * scale
 
-        wrapped = auto_mesh_axes(fn, ("batch",), None, scale=2)
+        wrapped = auto_mesh_axes(fn, None, scale=2)
 
         assert wrapped(3) == 6
         assert auto_axes_calls == []
@@ -132,30 +132,33 @@ class TestAutoMeshAxes:
 
         monkeypatch.setattr(jax.sharding, "auto_axes", fake_auto_axes)
         monkeypatch.setattr(
-            "ainmax._src.sharding.canonicalize_sharding",
+            "ainmax._src.sharding.resolve_sharding",
             lambda axes, sharding, fn_name: sharding,
         )
 
         def fn(x, *, scale):
             return x * scale
 
-        result = auto_mesh_axes(fn, ("batch",), P("data"), scale=5)
+        result = auto_mesh_axes(fn, P("data"), scale=5)
 
         assert result == "AUTO_AXES_RESULT"
         assert captured["out_sharding"] == P("data")
         assert captured["fn"](4) == 20
 
-    def test_canonicalize_sharding_called_with_auto_mesh_fn_name(self, monkeypatch):
+    def test_resolve_sharding_called_with_auto_mesh_fn_name(self, monkeypatch, mesh_1d):
         seen = {}
 
-        def fake_canonicalize(axes, sharding, fn_name):
+        def fake_resolve(axes, sharding, fn_name):
             seen["fn_name"] = fn_name
-            return sharding
+            return P("x")
 
-        monkeypatch.setattr("ainmax._src.sharding.canonicalize_sharding", fake_canonicalize)
-        monkeypatch.setattr(jax.sharding, "auto_axes", lambda f, out_sharding: out_sharding)
+        monkeypatch.setattr("ainmax._src.sharding.util.resolve_sharding", fake_resolve)
+        monkeypatch.setattr(jax.sharding, "auto_axes", lambda f, out_sharding: f)
 
-        auto_mesh_axes(lambda x: x, ("batch",), P("data"))
+        with jax.set_mesh(mesh_1d):
+            x = zeros({"batch": 8})
+            wrapped = auto_mesh_axes(lambda x: x, PM({"batch": "x"}))
+            wrapped(x)
 
         assert seen["fn_name"] == "auto_mesh"
 
@@ -166,7 +169,7 @@ class TestAutoMeshAxes:
             return x
 
         with jax.set_mesh(mesh_1d):
-            wrapped = auto_mesh_axes(fn, ("batch",), pm)
+            wrapped = auto_mesh_axes(fn, pm)
             x = zeros({"batch": 8})
             out = wrapped(x)
 
@@ -302,8 +305,8 @@ class TestJitComposability:
     def test_pm_derived_sharding_used_as_jit_in_and_out_shardings(self, mesh_1d):
         pm = PM({"batch": "x"})
         with jax.set_mesh(mesh_1d):
-            in_sharding = NamedSharding(mesh_1d, canonicalize_sharding(("batch", "feature"), pm, "test"))
-            out_sharding = NamedSharding(mesh_1d, canonicalize_sharding(("batch",), pm, "test"))
+            in_sharding = NamedSharding(mesh_1d, resolve_sharding(("batch", "feature"), pm, "test"))
+            out_sharding = NamedSharding(mesh_1d, resolve_sharding(("batch",), pm, "test"))
 
             jit_contract = jax.jit(
                 _dummy_contract,
@@ -321,7 +324,7 @@ class TestJitComposability:
     def test_with_sharding_constraint_composes_inside_jit(self, mesh_1d):
         pm = PM({"batch": "x"})
         with jax.set_mesh(mesh_1d):
-            batch_spec = canonicalize_sharding(("batch",), pm, "test")
+            batch_spec = resolve_sharding(("batch",), pm, "test")
 
             @jax.jit
             def jitted_contract(a, b):
@@ -336,10 +339,10 @@ class TestJitComposability:
         assert jnp.allclose(out, jnp.sum(a * b, axis=-1))
 
     def test_auto_mesh_axes_composes_with_jit_and_explicit_sharding(self, mesh_1d):
-        pm = PM({"batch": "x"})
+        pm = P("x")
         with jax.set_mesh(mesh_1d):
-            auto_contract = auto_mesh_axes(_dummy_contract, ("batch",), pm)
-            batch_spec = canonicalize_sharding(("batch",), pm, "test")
+            auto_contract = auto_mesh_axes(_dummy_contract, pm)
+            batch_spec = resolve_sharding(("batch",), pm, "test")
 
             @jax.jit
             def outer(a, b):
@@ -356,7 +359,7 @@ class TestJitComposability:
     def test_resharded_arrays_feed_correctly_into_a_jitted_contract(self, mesh_1d):
         pm = PM({"batch": "x"})
         with jax.set_mesh(mesh_1d):
-            batch_spec = canonicalize_sharding(("batch",), pm, "test")
+            batch_spec = resolve_sharding(("batch",), pm, "test")
             a = reshard(jnp.arange(32.0).reshape(8, 4), batch_spec)
             b = device_put(jnp.ones((8, 4)), batch_spec)
 

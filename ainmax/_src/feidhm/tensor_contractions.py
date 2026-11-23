@@ -15,8 +15,7 @@ from ainmax._src.axis_util import (
     remove_axes,
 )
 from ainmax._src.feidhm import constructors, util
-from ainmax._src.partition import ShardingLike
-from ainmax._src.sharding import canonicalize_sharding
+from ainmax._src.sharding import resolve_sharding, ShardingLike
 from ainmax._src.typing import NamedArray, NamedArrayLike
 
 
@@ -144,7 +143,7 @@ def _dot(
 ) -> NamedArray:
     dimension_numbers, out_axes = _parse_dot_axes(lhs.axes, rhs.axes, spec)
 
-    canonical_sharding = canonicalize_sharding(out_axes, out_sharding, "dot")
+    canonical_sharding = resolve_sharding(out_axes, out_sharding, "dot")
     jax_array = lax_dot(
         lhs.array,
         rhs.array,
@@ -430,7 +429,7 @@ def _multi_dot(
 ) -> NamedArray:
     sublists, out_sublist, out_axes = _chain_sublists(tuple(a.axes for a in arrays), axes, allow_positional_fallback)
 
-    canonical_sharding = canonicalize_sharding(out_axes, out_sharding, "multi_dot")
+    canonical_sharding = resolve_sharding(out_axes, out_sharding, "multi_dot")
     path = optimize if isinstance(optimize, str) else list(optimize)
     # `jnp.einsum` also takes the interleaved ``op0, sublist0, op1, sublist1, ..., out_sublist`` form, so no subscript
     # string is built. It hands path search to `opt_einsum.contract_path` (shapes only, at trace time) and runs each

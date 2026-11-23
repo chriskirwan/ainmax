@@ -11,8 +11,7 @@ from jax import Array
 from ainmax._src.axis import Axis, AxisLike, AxisSelector
 from ainmax._src.axis_util import axis_index, axis_indices, check_unique_axis_names, remove_axes
 from ainmax._src.feidhm import constructors, operations, util
-from ainmax._src.partition import ShardingLike
-from ainmax._src.sharding import canonicalize_sharding
+from ainmax._src.sharding import resolve_sharding, ShardingLike
 from ainmax._src.typing import NamedArray, NamedArrayLike
 
 
@@ -444,7 +443,7 @@ class NamedIndexUpdateRef:
         Returns:
             A `NamedArray` with the axes ``self.output_axes``.
         """
-        jax_sharding = canonicalize_sharding(self.output_axes, out_sharding, "NamedArray.at.get")
+        jax_sharding = resolve_sharding(self.output_axes, out_sharding, "NamedArray.at.get")
         jax_array = self.source.array.at[self.positional].get(out_sharding=jax_sharding, **kwargs)
         return constructors.array(jax_array, self.output_axes)
 
@@ -565,7 +564,7 @@ class NamedIndexUpdateRef:
         named_value = util.ensure_named(f"NamedArray.at.{method_name}", value)
         named_value = operations.broadcast_to(named_value, self.output_axes)
 
-        jax_sharding = canonicalize_sharding(self.source.axes, out_sharding, f"NamedArray.at.{method_name}")
+        jax_sharding = resolve_sharding(self.output_axes, out_sharding, f"NamedArray.at.{method_name}")
 
         updated = getattr(self.source.array.at[self.positional], method_name)(
             named_value.array, out_sharding=jax_sharding, **kwargs
