@@ -117,7 +117,7 @@ class TestAutoMeshAxes:
         def fn(x, *, scale):
             return x * scale
 
-        wrapped = auto_mesh_axes(fn, ("batch",), None, scale=2)
+        wrapped = auto_mesh_axes(fn, None, scale=2)
 
         assert wrapped(3) == 6
         assert auto_axes_calls == []
@@ -139,23 +139,26 @@ class TestAutoMeshAxes:
         def fn(x, *, scale):
             return x * scale
 
-        result = auto_mesh_axes(fn, ("batch",), P("data"), scale=5)
+        result = auto_mesh_axes(fn, P("data"), scale=5)
 
         assert result == "AUTO_AXES_RESULT"
         assert captured["out_sharding"] == P("data")
         assert captured["fn"](4) == 20
 
-    def test_canonicalize_sharding_called_with_auto_mesh_fn_name(self, monkeypatch):
+    def test_resolve_sharding_called_with_auto_mesh_fn_name(self, monkeypatch, mesh_1d):
         seen = {}
 
-        def fake_canonicalize(axes, sharding, fn_name):
+        def fake_resolve(axes, sharding, fn_name):
             seen["fn_name"] = fn_name
-            return sharding
+            return P("x")
 
-        monkeypatch.setattr("ainmax._src.sharding.resolve_sharding", fake_canonicalize)
-        monkeypatch.setattr(jax.sharding, "auto_axes", lambda f, out_sharding: out_sharding)
+        monkeypatch.setattr("ainmax._src.sharding.util.resolve_sharding", fake_resolve)
+        monkeypatch.setattr(jax.sharding, "auto_axes", lambda f, out_sharding: f)
 
-        auto_mesh_axes(lambda x: x, ("batch",), P("data"))
+        with jax.set_mesh(mesh_1d):
+            x = zeros({"batch": 8})
+            wrapped = auto_mesh_axes(lambda x: x, PM({"batch": "x"}))
+            wrapped(x)
 
         assert seen["fn_name"] == "auto_mesh"
 
@@ -166,7 +169,7 @@ class TestAutoMeshAxes:
             return x
 
         with jax.set_mesh(mesh_1d):
-            wrapped = auto_mesh_axes(fn, ("batch",), pm)
+            wrapped = auto_mesh_axes(fn, pm)
             x = zeros({"batch": 8})
             out = wrapped(x)
 
@@ -336,9 +339,9 @@ class TestJitComposability:
         assert jnp.allclose(out, jnp.sum(a * b, axis=-1))
 
     def test_auto_mesh_axes_composes_with_jit_and_explicit_sharding(self, mesh_1d):
-        pm = PM({"batch": "x"})
+        pm = P("x")
         with jax.set_mesh(mesh_1d):
-            auto_contract = auto_mesh_axes(_dummy_contract, ("batch",), pm)
+            auto_contract = auto_mesh_axes(_dummy_contract, pm)
             batch_spec = resolve_sharding(("batch",), pm, "test")
 
             @jax.jit
