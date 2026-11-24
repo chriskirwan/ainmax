@@ -1,4 +1,4 @@
-from ainmax import feidhm as feidhm, nn as nn, random as random, sharding as sharding, typing as typing
+from ainmax import feidhm as feidhm, random as random, sharding as sharding, typing as typing
 from ainmax._src.axis import Axis as Axis
 from ainmax._src.axis_util import (
     axis_index as axis_index,
