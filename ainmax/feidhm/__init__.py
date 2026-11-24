@@ -33,7 +33,9 @@ from ainmax._src.feidhm.indexing import (
     diagonal as diagonal,
     dynamic_slice as dynamic_slice,
     dynamic_update_slice as dynamic_update_slice,
+    index_exp as index_exp,
     resolve_index as resolve_index,
+    s_ as s_,
     take as take,
     take_along_axis as take_along_axis,
 )
