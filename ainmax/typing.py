@@ -1,3 +1,10 @@
+from ainmax._src.axis_util import (
+    AxisLike as AxisLike,
+    AxisSelection as AxisSelection,
+    AxisSelector as AxisSelector,
+    AxisShape as AxisShape,
+    AxisSpec as AxisSpec,
+)
 from ainmax._src.typing import (
     BFloat16 as BFloat16,
     Bool as Bool,
