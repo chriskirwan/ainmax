@@ -9,6 +9,7 @@ import jax.scipy.linalg as jsl
 
 from ainmax._src.axis import Axis, AxisLike, AxisSelection, AxisSelector
 from ainmax._src.axis_util import (
+    axis_index,
     axis_indices,
     check_unique_axis_names,
     match_axes,
@@ -236,6 +237,20 @@ class _RHS(NamedTuple):
     free_axes: tuple[Axis, ...]
 
 
+def _rhs_axis_index(fn: str, b: NamedArray, b_axis: AxisSelector | None, match_axis: Axis) -> int:
+    """Position of the axis of ``b`` that lives in the matrix space being solved against.
+
+    ``None`` picks the axis named like ``match_axis`` and falls back to the last axis.
+    """
+    if b.ndim == 0:
+        raise ValueError(f"{fn}: right-hand side must have at least one axis")
+    if b_axis is not None:
+        (idx,) = axis_indices(b.axes, (b_axis,))
+        return idx
+    idx = axis_index(b.axes, match_axis.name)
+    return b.ndim - 1 if idx is None else idx
+
+
 def _prepare_rhs(
     fn: str,
     batch_axes: tuple[Axis, ...],
@@ -251,14 +266,7 @@ def _prepare_rhs(
     axis of the matrix (by name, anonymous ones right-aligned) are batch axes; all remaining axes of ``b`` are free
     right-hand-side axes and are flattened into ``K`` so that the factorisation is shared between them.
     """
-    if b.ndim == 0:
-        raise ValueError(f"{fn}: right-hand side must have at least one axis")
-    if b_axis is None:
-        idx = b.ndim - 1
-        if match_axis.name is not None:
-            idx = next((i for i, ax in enumerate(b.axes) if ax.name == match_axis.name), idx)
-    else:
-        (idx,) = axis_indices(b.axes, (b_axis,))
+    idx = _rhs_axis_index(fn, b, b_axis, match_axis)
     if b.axes[idx].size != n:
         raise ValueError(f"{fn}: right-hand side axis {b.axes[idx]} does not have the matrix size {n}")
 
@@ -1166,21 +1174,6 @@ def solve_sylvester(
         return constructors.array(x, out_axes[-2:])
 
     return vmap(_solve, batch)(a_c, b_c, c_c) if batch else _solve(a_c, b_c, c_c)
-
-
-def _rhs_axis_index(fn: str, b: NamedArray, b_axis: AxisSelector | None, match_axis: Axis) -> int:
-    """Position of the axis of ``b`` that lives in the matrix space being solved against.
-
-    ``None`` picks the axis named like ``match_axis`` and falls back to the last axis.
-    """
-    if b.ndim == 0:
-        raise ValueError(f"{fn}: right-hand side must have at least one axis")
-    if b_axis is not None:
-        (idx,) = axis_indices(b.axes, (b_axis,))
-        return idx
-    if match_axis.name is not None:
-        return next((i for i, ax in enumerate(b.axes) if ax.name == match_axis.name), b.ndim - 1)
-    return b.ndim - 1
 
 
 def lstsq(
