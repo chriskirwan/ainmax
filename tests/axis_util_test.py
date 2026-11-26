@@ -556,7 +556,7 @@ class TestReplaceAxes:
 
     def test_duplicate_names_in_replacement_raises(self):
         axes = (Axis(4, "x"),)
-        with pytest.raises(ValueError, match="duplicate"):
+        with pytest.raises(ValueError, match="Duplicate axis names detected"):
             replace_axes(axes, "x", [Axis(2, "a"), Axis(2, "a")])
 
     def test_replacement_name_colliding_with_retained_axis_raises(self):
