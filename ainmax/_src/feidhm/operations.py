@@ -3,7 +3,6 @@ from functools import reduce
 from math import prod
 from typing import Any, overload
 
-import equinox as eqx
 import jax.lax
 import jax.numpy as jnp
 from jax import Device
@@ -923,8 +922,7 @@ def astype(
         An array with the same shape as ``a``, containing values of the
         specified dtype.
     """
-    a = util.ensure_named("astype", a)
-    return eqx.tree_at(lambda x: x.array, a, replace_fn=lambda x: jnp.astype(x, dtype, copy=copy, device=device))
+    return ufuncs.wrap_elementwise_unary_op(lambda x: jnp.astype(x, dtype, copy=copy, device=device))(a)
 
 
 def allclose(
@@ -1077,8 +1075,7 @@ def round(a: NamedArrayLike, decimals: int = 0) -> NamedArray:
         A ``NamedArray`` containing the rounded values to the specified decimals with same shape and dtype as ``a``
     """
 
-    a = util.ensure_named("round", a)
-    return eqx.tree_at(lambda x: x.array, a, replace_fn=lambda x: jnp.round(x, decimals))
+    return ufuncs.wrap_elementwise_unary_op(lambda x: jnp.round(x, decimals))(a)
 
 
 def around(a: NamedArrayLike, decimals: int = 0) -> NamedArray:
@@ -1154,8 +1151,7 @@ def angle(a: NamedArrayLike, deg: bool = False) -> NamedArray:
         ``float``.
     """
 
-    a = util.ensure_named("angle", a)
-    return eqx.tree_at(lambda x: x.array, a, replace_fn=lambda x: jnp.angle(x, deg))
+    return ufuncs.wrap_elementwise_unary_op(lambda x: jnp.angle(x, deg=deg))(a)
 
 
 # Copies and axis adjustments
