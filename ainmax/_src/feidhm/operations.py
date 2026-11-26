@@ -457,14 +457,7 @@ def ravel(a: NamedArrayLike, name: AxisLike | None = None) -> NamedArray:
     """
     named = util.ensure_named("ravel", a)
 
-    if isinstance(name, Axis):
-        if name.size != named.size:
-            raise ValueError(
-                f"ravel: provided axis {name!r} has size {name.size}, but flattened array has size {named.size}"
-            )
-        flat_axis = name
-    else:
-        flat_axis = Axis(named.size, name)
+    flat_axis = util.resolve_new_axis(name, prod(axis_sizes(named.axes)), "ravel", "name")
     jax_array = jnp.ravel(named.array)
     return constructors.array(jax_array, (flat_axis,))
 
@@ -586,10 +579,7 @@ def stack(
     if not named:
         raise ValueError("stack requires at least one array")
 
-    if isinstance(axis, str):
-        axis = Axis(len(named), axis)
-    elif axis.size != len(named):
-        raise ValueError(f"stack: new axis {axis!r} has size {axis.size} but {len(named)} arrays were provided")
+    axis = util.resolve_new_axis(axis, len(named), "stack", "axis")
 
     ref, jax_arrays = _canonicalize_arrays("stack", named)
 
@@ -1792,8 +1782,8 @@ def top_k(
     if new_axis is None:
         axis = resolve_axes(named.axes, axis)[0]
         new_axis = axis.resize(k)
-    elif isinstance(new_axis, str):
-        new_axis = Axis(k, new_axis)
+    else:
+        new_axis = util.resolve_new_axis(new_axis, k, "top_k", "new_axis")
 
     updated_axes = named.axes[:idx] + (new_axis,) + named.axes[idx + 1 :]
     return constructors.array(values, updated_axes), constructors.array(indices, updated_axes)
@@ -1912,8 +1902,8 @@ def bincount(
         minlength=minlength,
         length=length,
     )
-
-    return constructors.array(result, (_result_axis(axis, result.size, "bincount"),))
+    result_axis = util.resolve_new_axis(axis, result.size, "bincount", "axis")
+    return constructors.array(result, result_axis)
 
 
 def digitize(
@@ -1947,20 +1937,6 @@ def digitize(
     return constructors.array(result, x.axes)
 
 
-def _result_axis(
-    specification: AxisLike | None,
-    size: int,
-    name: str,
-) -> Axis:
-    """Construct an output axis, preserving an explicitly supplied name."""
-    if isinstance(specification, Axis):
-        if specification.size != size:
-            raise ValueError(f"{name}: axis has size {specification.size}, expected {size}")
-        return specification
-
-    return Axis(size, specification)
-
-
 def _histogram_inputs(
     a: NamedArrayLike,
     weights: NamedArrayLike | None,
@@ -1976,22 +1952,6 @@ def _histogram_inputs(
         raise ValueError("histogram: weights must have the same number of elements as the input")
 
     return a, weights.array.reshape(-1)
-
-
-def _histogram_axis_pair(
-    axis: AxisLike | None,
-    bins: int,
-    name: str,
-) -> tuple[Axis, Axis]:
-    """Construct matching bin and bin-edge axes."""
-    if isinstance(axis, Axis):
-        if axis.size != bins:
-            raise ValueError(f"{name}: bin axis has size {axis.size}, expected {bins}")
-        label = axis.name
-    else:
-        label = axis
-
-    return Axis(bins, label), Axis(bins + 1, label)
 
 
 def histogram(
@@ -2046,7 +2006,9 @@ def histogram(
     )
 
     specification = axis if axis is not None else inferred_name
-    bin_axis, edge_axis = _histogram_axis_pair(specification, counts.size, "histogram")
+
+    bin_axis = util.resolve_new_axis(specification, counts.size, "histogram", "axis")
+    edge_axis = bin_axis.resize(counts.size + 1)
 
     return (
         constructors.array(counts, (bin_axis,)),
@@ -2102,7 +2064,7 @@ def histogram_bin_edges(
     )
 
     specification = axis if axis is not None else inferred_name
-    edge_axis = _result_axis(specification, edges.size, "histogram_bin_edges")
+    edge_axis = util.resolve_new_axis(specification, edges.size, "histogram_bin_edges", "axis")
 
     return constructors.array(edges, (edge_axis,))
 
@@ -2167,8 +2129,8 @@ def histogram2d(
     )
 
     axis_specs = axes if axes is not None else (None, None)
-    x_axis = _result_axis(axis_specs[0], result.shape[0], "histogram2d")
-    y_axis = _result_axis(axis_specs[1], result.shape[1], "histogram2d")
+    x_axis = util.resolve_new_axis(axis_specs[0], result.shape[0], "histogram2d", "axes")
+    y_axis = util.resolve_new_axis(axis_specs[1], result.shape[1], "histogram2d", "axes")
 
     return (
         constructors.array(result, (x_axis, y_axis)),
@@ -2240,7 +2202,9 @@ def histogramdd(
                 f"histogramdd: got {len(axis_specs)} output axes for a {result.ndim}-dimensional histogram"
             )
 
-    result_axes = tuple(_result_axis(spec, size, "histogramdd") for spec, size in zip(axis_specs, result.shape))
+    result_axes = tuple(
+        util.resolve_new_axis(spec, size, "histogramdd", "axes") for spec, size in zip(axis_specs, result.shape)
+    )
 
     edge_arrays = [constructors.array(edge, (result_axes[i].resize(edge.size),)) for i, edge in enumerate(edges)]
 

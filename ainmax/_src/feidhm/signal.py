@@ -24,16 +24,6 @@ def _signal_axis(name: str, x: NamedArray, axis: AxisSelector) -> int:
     return idx
 
 
-def _result_axis(specification: AxisLike | None, size: int, name: str) -> Axis:
-    """Construct an output axis, preserving an explicitly supplied `Axis`."""
-    if isinstance(specification, Axis):
-        if specification.size != size:
-            raise ValueError(f"{name}: axis has size {specification.size}, expected {size}")
-        return specification
-
-    return Axis(size, specification)
-
-
 def _align_signals(name: str, a: NamedArray, b: NamedArray) -> tuple[NamedArray, NamedArray]:
     """Pair the axes of two signals.
 
@@ -353,7 +343,7 @@ def csd(
         average=average,
     )
 
-    freq = _result_axis(freq_axis, freqs.size, "csd")
+    freq = util.resolve_new_axis(freq_axis, freqs.size, "csd", "freq_axis")
     axes = tuple(Axis(size, n) for size, n in zip(result.shape, names))
     axes = axes[:idx] + (freq,) + axes[idx + 1 :]
     return constructors.array(freqs, (freq,)), constructors.array(result, axes)
@@ -399,7 +389,7 @@ def welch(
         average=average,
     )
 
-    freq = _result_axis(freq_axis, freqs.size, "welch")
+    freq = util.resolve_new_axis(freq_axis, freqs.size, "welch", "freq_axis")
     axes = x.axes[:idx] + (freq,) + x.axes[idx + 1 :]
     return constructors.array(freqs, (freq,)), constructors.array(result, axes)
 
@@ -460,8 +450,10 @@ def stft(
         axis=idx,
     )
 
-    freq = _result_axis(freq_axis, freqs.size, "stft")
-    segments = _result_axis(time_axis if time_axis is not None else x.axes[idx].name, times.size, "stft")
+    freq = util.resolve_new_axis(freq_axis, freqs.size, "stft", "freq_axis")
+    segments = util.resolve_new_axis(
+        time_axis if time_axis is not None else x.axes[idx].name, times.size, "stft", "time_axis"
+    )
     axes = x.axes[:idx] + (freq,) + x.axes[idx + 1 :] + (segments,)
     return (
         constructors.array(freqs, (freq,)),
