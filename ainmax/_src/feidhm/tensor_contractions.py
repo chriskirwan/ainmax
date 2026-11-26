@@ -11,6 +11,7 @@ from ainmax._src.axis_util import (
     axis_indices,
     axis_names,
     axis_selection_to_tuple,
+    check_unique_axis_names,
     match_axes,
     remove_axes,
 )
@@ -116,17 +117,7 @@ def _parse_dot_axes(
     free_rhs: tuple[Axis, ...] = tuple(ax for i, ax in enumerate(rhs_axes) if i not in used_rhs_idx)
     output_axes: tuple[Axis, ...] = batch_out + free_lhs + free_rhs
 
-    named_output = [ax.name for ax in output_axes if ax.name is not None]
-    if len(named_output) != len(set(named_output)):
-        seen: set[str] = set()
-        duplicates: set[str] = set()
-        for n in named_output:
-            (duplicates if n in seen else seen).add(n)
-        raise ValueError(
-            f"Output axis name collision — the following names appear in both "
-            f"the lhs and rhs free axes: {duplicates}. "
-            "Rename one side before calling `dot`."
-        )
+    check_unique_axis_names(output_axes)
 
     return dimension_numbers, output_axes
 

@@ -677,7 +677,7 @@ class TestStack:
             stack([], "s")
 
     def test_new_axis_size_mismatch_raises(self, mat):
-        with pytest.raises(ValueError, match="has size 3 but 2 arrays"):
+        with pytest.raises(ValueError, match="has size 3 but the result"):
             stack([mat, mat], Axis(3, "s"))
 
     def test_new_axis_name_clash_raises(self, mat):
@@ -1345,7 +1345,7 @@ class TestBincount:
         with pytest.raises(ValueError, match="same number of elements"):
             bincount(values, array(jnp.ones(2), (Axis(2, "weight"),)))
 
-        with pytest.raises(ValueError, match="axis has size 3, expected 2"):
+        with pytest.raises(ValueError, match="has size 3 but the result"):
             bincount(values, length=2, axis=Axis(3, "bin"))
 
         with pytest.raises(ValueError, match="one-dimensional"):
@@ -1398,7 +1398,7 @@ class TestHistogramBinEdges:
 
     def test_axis_object_must_match_edge_count(self):
         values = array(jnp.arange(4.0), (Axis(4, "sample"),))
-        with pytest.raises(ValueError, match="axis has size 4, expected 3"):
+        with pytest.raises(ValueError, match="has size 4 but the result"):
             histogram_bin_edges(values, bins=2, axis=Axis(4, "bin"))
 
 

@@ -17,6 +17,7 @@ from ainmax._src.axis_util import (
     axis_shape_to_tuple,
     axis_sizes,
     check_unique_axis_names,
+    concatenate_axes,
 )
 from ainmax._src.feidhm import constructors, util
 from ainmax._src.sharding import resolve_sharding, ShardingLike
@@ -25,6 +26,7 @@ from ainmax._src.typing import (
     NamedArray,
     NamedArrayLike,
 )
+from ainmax._src.util import default_floating_dtype
 
 
 def zeros(
@@ -476,7 +478,10 @@ def indices(
     return constructors.array(jax_indices, out_axes)
 
 
-# Array creation operations
+def _sample_axis(axis: AxisLike, default_size: int = 50):
+    if isinstance(axis, str):
+        axis = Axis(default_size, axis)
+    return axis
 
 
 @overload
@@ -548,8 +553,7 @@ def linspace(
         A ``NamedArray`` of samples, or a tuple ``(samples, step)`` when ``retstep=True``.
     """
 
-    if isinstance(axis, str):
-        axis = Axis(50, axis)  # numpy default
+    axis = _sample_axis(axis)
 
     from ainmax._src.feidhm.operations import broadcast_arrays_and_shape
 
@@ -559,7 +563,7 @@ def linspace(
 
     jax_array = jnp.linspace(start.array, stop.array, axis.size, endpoint=endpoint, retstep=retstep, dtype=dtype)
 
-    out_axes = (axis,) + common_axes
+    out_axes = concatenate_axes((axis,), common_axes)
     step = None
     if retstep:
         jax_array, jax_array_step = jax_array
@@ -596,8 +600,7 @@ def logspace(
     Returns:
         A ``NamedArray`` of samples on a log scale.
     """
-    if isinstance(axis, str):
-        axis = Axis(50, axis)  # numpy default
+    axis = _sample_axis(axis)
 
     from ainmax._src.feidhm.operations import broadcast_arrays_and_shape
 
@@ -607,7 +610,7 @@ def logspace(
 
     jax_array = jnp.logspace(start.array, stop.array, axis.size, endpoint=endpoint, base=base.array, dtype=dtype)
 
-    out_axes = (axis,) + common_axes
+    out_axes = concatenate_axes((axis,), common_axes)
     return constructors.array(jax_array, out_axes, out_sharding=out_sharding)
 
 
@@ -635,8 +638,7 @@ def geomspace(
     Returns:
         A ``NamedArray`` of samples on a geometric progression.
     """
-    if isinstance(axis, str):
-        axis = Axis(50, axis)  # numpy default
+    axis = _sample_axis(axis)
 
     from ainmax._src.feidhm.operations import broadcast_arrays_and_shape
 
@@ -646,7 +648,7 @@ def geomspace(
 
     jax_array = jnp.geomspace(start.array, stop.array, axis.size, endpoint=endpoint, dtype=dtype)
 
-    out_axes = (axis,) + common_axes
+    out_axes = concatenate_axes((axis,), common_axes)
     return constructors.array(jax_array, out_axes, out_sharding=out_sharding)
 
 
@@ -662,8 +664,8 @@ def delta(
     The result equals 1 where all selected axes share the same index and 0 elsewhere.
 
     Args:
-        shape: The output shape.
-        axes: The axes to compare for equality. Defaults to all axes.
+        shape: The output shape. Must be of length 2 or longer.
+        axes: The axes to compare for equality. Defaults to all axes in `shape`.
         dtype: Optional dtype of the output. Defaults to ``float32``.
         out_sharding: Optional sharding specification for the output array.
 
@@ -685,7 +687,7 @@ def delta(
     eyes = [i1 == i2 for i1, i2 in zip(iotas[:-1], iotas[1:])]
     result = reduce(operator.and_, eyes)
 
-    new_dtype = jnp.float32 if dtype is None else dtype
+    new_dtype = default_floating_dtype().floating if dtype is None else dtype
     casted_result = eqx.tree_at(lambda m: m.array, result, replace_fn=lambda x: jnp.astype(x, new_dtype))
     from ainmax._src.feidhm.operations import broadcast_to
 
@@ -731,10 +733,6 @@ def identity(
 
 def _tri_mask(array: NamedArray, axis1: AxisSelector, axis2: AxisSelector, k: int, *, upper: bool) -> NamedArray:
     """Build a mask selecting the upper or lower triangle of a matrix-like array."""
-    idx0, idx1 = axis_indices(array.axes, (axis1, axis2))
-    if idx0 == idx1:
-        raise ValueError(f"axis1 and axis2 must be distinct, both resolved to position {idx0}")
-
     from ainmax._src.feidhm.operations import broadcast_to
 
     idx0, idx1 = axis_indices(array.axes, (axis1, axis2))

@@ -7,7 +7,7 @@ from jax.lax import PrecisionLike
 from jax.typing import DTypeLike
 
 from ainmax._src.axis import Axis, AxisLike, AxisSelector
-from ainmax._src.axis_util import axis_index
+from ainmax._src.axis_util import axis_index, axis_names
 from ainmax._src.feidhm import constructors, util
 from ainmax._src.typing import NamedArray, NamedArrayLike
 
@@ -24,16 +24,6 @@ def _signal_axis(name: str, x: NamedArray, axis: AxisSelector) -> int:
     return idx
 
 
-def _result_axis(specification: AxisLike | None, size: int, name: str) -> Axis:
-    """Construct an output axis, preserving an explicitly supplied `Axis`."""
-    if isinstance(specification, Axis):
-        if specification.size != size:
-            raise ValueError(f"{name}: axis has size {specification.size}, expected {size}")
-        return specification
-
-    return Axis(size, specification)
-
-
 def _align_signals(name: str, a: NamedArray, b: NamedArray) -> tuple[NamedArray, NamedArray]:
     """Pair the axes of two signals.
 
@@ -43,8 +33,8 @@ def _align_signals(name: str, a: NamedArray, b: NamedArray) -> tuple[NamedArray,
     if a.ndim != b.ndim:
         raise ValueError(f"{name}: inputs must have the same number of dimensions, got {a.ndim} and {b.ndim}")
 
-    a_names = [ax.name for ax in a.axes]
-    b_names = [ax.name for ax in b.axes]
+    a_names = axis_names(a.axes)
+    b_names = axis_names(b.axes)
     if None not in a_names and None not in b_names and a_names != b_names and set(a_names) == set(b_names):
         perm = [b_names.index(n) for n in a_names]
         b = constructors.array(jnp.transpose(b.array, perm), tuple(b.axes[i] for i in perm))
@@ -330,7 +320,7 @@ def csd(
     x = util.ensure_named("csd", x)
     idx = _signal_axis("csd", x, axis)
 
-    names = tuple(ax.name for ax in x.axes)
+    names = axis_names(x.axes)
     y_array = None
     if y is not None:
         y = util.ensure_named("csd", y)
@@ -353,7 +343,7 @@ def csd(
         average=average,
     )
 
-    freq = _result_axis(freq_axis, freqs.size, "csd")
+    freq = util.resolve_new_axis(freq_axis, freqs.size, "csd", "freq_axis")
     axes = tuple(Axis(size, n) for size, n in zip(result.shape, names))
     axes = axes[:idx] + (freq,) + axes[idx + 1 :]
     return constructors.array(freqs, (freq,)), constructors.array(result, axes)
@@ -399,7 +389,7 @@ def welch(
         average=average,
     )
 
-    freq = _result_axis(freq_axis, freqs.size, "welch")
+    freq = util.resolve_new_axis(freq_axis, freqs.size, "welch", "freq_axis")
     axes = x.axes[:idx] + (freq,) + x.axes[idx + 1 :]
     return constructors.array(freqs, (freq,)), constructors.array(result, axes)
 
@@ -460,8 +450,10 @@ def stft(
         axis=idx,
     )
 
-    freq = _result_axis(freq_axis, freqs.size, "stft")
-    segments = _result_axis(time_axis if time_axis is not None else x.axes[idx].name, times.size, "stft")
+    freq = util.resolve_new_axis(freq_axis, freqs.size, "stft", "freq_axis")
+    segments = util.resolve_new_axis(
+        time_axis if time_axis is not None else x.axes[idx].name, times.size, "stft", "time_axis"
+    )
     axes = x.axes[:idx] + (freq,) + x.axes[idx + 1 :] + (segments,)
     return (
         constructors.array(freqs, (freq,)),

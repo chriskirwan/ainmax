@@ -9,7 +9,7 @@ import numpy as np
 from jax import Array
 
 from ainmax._src.axis import Axis, AxisLike, AxisSelector
-from ainmax._src.axis_util import axis_index, axis_indices, check_unique_axis_names, remove_axes
+from ainmax._src.axis_util import axis_index, axis_indices, axis_sizes, check_unique_axis_names, remove_axes
 from ainmax._src.feidhm import constructors, operations, util
 from ainmax._src.sharding import resolve_sharding, ShardingLike
 from ainmax._src.typing import NamedArray, NamedArrayLike
@@ -315,7 +315,7 @@ def dynamic_slice(
         )
 
     starts: list[int | Array] = [0] * len(array.axes)
-    sizes: list[int] = [ax.size for ax in array.axes]
+    sizes: list[int] = list(axis_sizes(array.axes))
     new_axes = list(array.axes)
 
     for position, s in start_positions.items():
@@ -348,7 +348,7 @@ def dynamic_update_slice(array: NamedArray, update: NamedArrayLike, start: Mappi
     update = util.ensure_named("dynamic_update_slice", update)
     _check_axis_names_agree(array.axes, update.axes, "dynamic_update_slice")
 
-    starts: list[int | Array] = [0] * array.array.ndim
+    starts: list[int | Array] = [0] * array.ndim
     for position, s in _resolve_index_map(array.axes, start, "dynamic_update_slice").items():
         starts[position] = util.scalar_namedarray_to_jax_scalar(s)
 
@@ -672,7 +672,7 @@ def take_along_axis(
     _check_axis_names_agree(array.axes, indices.axes, "take_along_axis", skip=frozenset({position}))
 
     result = jnp.take_along_axis(array.array, indices.array, axis=position, mode=mode)
-    new_size = indices.array.shape[position]
+    new_size = indices.shape[position]
     new_axes = array.axes[:position] + (array.axes[position].resize(new_size),) + array.axes[position + 1 :]
     return constructors.array(result, new_axes)
 

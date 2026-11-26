@@ -541,8 +541,7 @@ def replace_axes(axes: Sequence[Axis], old: AxisSelection | None, new: AxisShape
     new_axes = axis_shape_to_tuple(new)
 
     new_names = [a.name for a in new_axes if a.name is not None]
-    if len(new_names) != len(set(new_names)):
-        raise ValueError(f"Replacement shape contains duplicate axis names: {new_names}")
+    check_unique_axis_names(new_axes)
 
     pos_set = set(positions)
     other_names = {axis.name for i, axis in enumerate(axes_list) if i not in pos_set and axis.name is not None}
