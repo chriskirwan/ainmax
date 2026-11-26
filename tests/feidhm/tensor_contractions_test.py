@@ -177,7 +177,7 @@ class TestDot:
         i, j = Axis(3, "i"), Axis(4, "j")
         a = _named_rand(0, i, j)
         b = _named_rand(1, j, i)
-        with pytest.raises(ValueError, match="Output axis name collision"):
+        with pytest.raises(ValueError, match="Duplicate axis names detected"):
             dot(a, b, ((("j",), ("j",)), ((), ())))
 
     def test_unresolved_selector_raises(self, x4):
@@ -486,7 +486,7 @@ class TestOuter:
 
     def test_shared_name_raises(self, x4):
         a = _named_rand(0, x4)
-        with pytest.raises(ValueError, match="Output axis name collision"):
+        with pytest.raises(ValueError, match="Duplicate axis names detected"):
             outer(a, a)
 
     def test_preferred_element_type(self, x4, y8):
