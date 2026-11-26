@@ -5,7 +5,7 @@ from typing import Any, overload
 
 import jax.lax
 import jax.numpy as jnp
-from jax import Device
+from jax import Array, Device
 from jax.typing import DTypeLike
 
 from ainmax._src.axis import Axis, AxisLike, AxisSelection, AxisSelector, AxisShape
@@ -98,7 +98,7 @@ def ndim(x: NamedArrayLike) -> int:
         The number of dimensions in ``x``.
     """
     if isinstance(x, NamedArray):
-        return x.array.ndim
+        return x.ndim
     return jnp.ndim(x)
 
 
@@ -150,7 +150,7 @@ def broadcast_to(
     target_sizes = axis_sizes(target)
     jax_sharding = resolve_sharding(target, out_sharding, "broadcast_to")
 
-    if named.array.ndim == 0:
+    if named.ndim == 0:
         jax_array = jnp.broadcast_to(named.array, target_sizes, out_sharding=jax_sharding)
         return constructors.array(jax_array, target)
 
@@ -158,7 +158,7 @@ def broadcast_to(
 
     # If source axes are not already in target order, transpose first.
     source_order = tuple(m.source for m in sorted(matched.matches, key=lambda m: m.target))
-    identity = tuple(range(named.array.ndim))
+    identity = tuple(range(named.ndim))
 
     if source_order != identity:
         array = jnp.transpose(named.array, source_order)
@@ -397,10 +397,10 @@ def _normalize_pad_width(axes: tuple[Axis, ...], pad_width: PadSpec) -> tuple[tu
     widths: list[tuple[int, int] | None] = [None] * len(axes)
     for key, val in pad_width.items():
         idx = axis_index(axes, key)
-        if idx is None:  # drop this check if axis_index raises on failure
-            raise ValueError(f"pad_width key {key!r} does not match any axis in {tuple(a.name for a in axes)}")
+        if idx is None:
+            raise ValueError(f"pad_width key {key} does not match any axis in {axis_names(axes)}")
         if widths[idx] is not None:
-            raise ValueError(f"axis {axes[idx].name!r} appears more than once in pad_width")
+            raise ValueError(f"axis {axes[idx].name} appears more than once in pad_width")
         widths[idx] = _resolve_pad_width(val)
     return tuple(w if w is not None else (0, 0) for w in widths)
 
@@ -1952,6 +1952,17 @@ def _histogram_inputs(
     return a, weights.array.reshape(-1)
 
 
+def _bins_array_and_bins(bins) -> tuple[Array, str | None]:
+    if isinstance(bins, NamedArray):
+        bins_array = bins.array
+        inferred_name = bins.axes[0].name if bins.ndim == 1 else None
+    else:
+        bins_array = bins
+        inferred_name = None
+
+    return bins_array, inferred_name
+
+
 def histogram(
     a: NamedArrayLike,
     bins: int | NamedArrayLike = 10,
@@ -1987,13 +1998,7 @@ def histogram(
             element, or ``axis`` has the wrong size.
     """
     a, weights_array = _histogram_inputs(a, weights)
-
-    if isinstance(bins, NamedArray):
-        bins_array = bins.array
-        inferred_name = bins.axes[0].name if bins.ndim == 1 else None
-    else:
-        bins_array = bins
-        inferred_name = None
+    bins_array, inferred_name = _bins_array_and_bins(bins)
 
     counts, edges = jnp.histogram(
         a.array.reshape(-1),
@@ -2046,13 +2051,7 @@ def histogram_bin_edges(
             element, or ``axis`` has the wrong size.
     """
     a, weights_array = _histogram_inputs(a, weights)
-
-    if isinstance(bins, NamedArray):
-        bins_array = bins.array
-        inferred_name = bins.axes[0].name if bins.ndim == 1 else None
-    else:
-        bins_array = bins
-        inferred_name = None
+    bins_array, inferred_name = _bins_array_and_bins(bins)
 
     edges = jnp.histogram_bin_edges(
         a.array.reshape(-1),

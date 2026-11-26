@@ -7,7 +7,7 @@ from jax.lax import PrecisionLike
 from jax.typing import DTypeLike
 
 from ainmax._src.axis import Axis, AxisLike, AxisSelector
-from ainmax._src.axis_util import axis_index
+from ainmax._src.axis_util import axis_index, axis_names
 from ainmax._src.feidhm import constructors, util
 from ainmax._src.typing import NamedArray, NamedArrayLike
 
@@ -33,8 +33,8 @@ def _align_signals(name: str, a: NamedArray, b: NamedArray) -> tuple[NamedArray,
     if a.ndim != b.ndim:
         raise ValueError(f"{name}: inputs must have the same number of dimensions, got {a.ndim} and {b.ndim}")
 
-    a_names = [ax.name for ax in a.axes]
-    b_names = [ax.name for ax in b.axes]
+    a_names = axis_names(a.axes)
+    b_names = axis_names(b.axes)
     if None not in a_names and None not in b_names and a_names != b_names and set(a_names) == set(b_names):
         perm = [b_names.index(n) for n in a_names]
         b = constructors.array(jnp.transpose(b.array, perm), tuple(b.axes[i] for i in perm))
@@ -320,7 +320,7 @@ def csd(
     x = util.ensure_named("csd", x)
     idx = _signal_axis("csd", x, axis)
 
-    names = tuple(ax.name for ax in x.axes)
+    names = axis_names(x.axes)
     y_array = None
     if y is not None:
         y = util.ensure_named("csd", y)

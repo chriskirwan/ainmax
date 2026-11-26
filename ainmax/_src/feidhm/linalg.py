@@ -11,6 +11,7 @@ from ainmax._src.axis import Axis, AxisLike, AxisSelection, AxisSelector
 from ainmax._src.axis_util import (
     axis_index,
     axis_indices,
+    axis_sizes,
     check_unique_axis_names,
     match_axes,
     remove_axes,
@@ -1205,7 +1206,7 @@ def lstsq(
     def _lstsq(a_i: NamedArray, b_i: NamedArray) -> LstsqResult:
         rhs = _prepare_rhs("lstsq", (), row.size, row, b_i, b_ax)
         x, res, rank, s = jnp.linalg.lstsq(a_i.array, rhs.array, rcond=rcond)
-        free_sizes = tuple(ax.size for ax in rhs.free_axes)
+        free_sizes = axis_sizes(rhs.free_axes)
         return LstsqResult(
             _finish_rhs(x, (), rhs.free_axes, x_ax),
             constructors.array(res.reshape(free_sizes), rhs.free_axes),
