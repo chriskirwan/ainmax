@@ -1,4 +1,5 @@
 from collections.abc import Callable, Mapping, Sequence
+from functools import reduce
 from math import prod
 from typing import Any, overload
 
@@ -15,6 +16,7 @@ from ainmax._src.axis_util import (
     axis_names,
     axis_shape_to_tuple,
     axis_sizes,
+    concatenate_axes,
     match_axes,
     remove_axes,
     resolve_axes,
@@ -589,7 +591,7 @@ def stack(
     position = _normalize_insert_index(index, len(ref), "stack")
     jax_array = jnp.stack(jax_arrays, axis=position, dtype=dtype)
 
-    out_axes = ref[:position] + (axis,) + ref[position:]
+    out_axes = reduce(concatenate_axes, (ref[:position], (axis,), ref[position:]))
     return constructors.array(jax_array, out_axes, out_sharding=out_sharding)
 
 
@@ -611,7 +613,7 @@ def unstack(a: NamedArrayLike, axis: AxisSelector = 0) -> tuple[NamedArray, ...]
     if idx is None:
         raise ValueError(f"unstack: axis {axis!r} not found in {named.axes}")
 
-    out_axes = named.axes[:idx] + named.axes[idx + 1 :]
+    out_axes = concatenate_axes(named.axes[:idx], named.axes[idx + 1 :])
     return tuple(constructors.array(x, out_axes) for x in jnp.unstack(named.array, axis=idx))
 
 
@@ -705,7 +707,7 @@ def concatenate(
     ref, jax_arrays = _canonicalize_arrays("concatenate", named, free=idx)
     jax_array = jnp.concatenate(jax_arrays, axis=idx, dtype=dtype)
 
-    out_axes = ref[:idx] + (ref[idx].resize(jax_array.shape[idx]),) + ref[idx + 1 :]
+    out_axes = concatenate_axes(concatenate_axes(ref[:idx], (ref[idx].resize(jax_array.shape[idx]),)), ref[idx + 1 :])
     return constructors.array(jax_array, out_axes, out_sharding=out_sharding)
 
 
@@ -1230,7 +1232,7 @@ def expand_dims(
 
     position = _normalize_insert_index(index, named.ndim, "expand_dims")
     array = jnp.expand_dims(named.array, axis=position)
-    axes = named.axes[:position] + (new_axis,) + named.axes[position:]
+    axes = reduce(concatenate_axes, (named.axes[:position], (new_axis,), named.axes[position:]))
 
     return constructors.array(array, axes)
 

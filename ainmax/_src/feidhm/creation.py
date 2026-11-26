@@ -17,6 +17,7 @@ from ainmax._src.axis_util import (
     axis_shape_to_tuple,
     axis_sizes,
     check_unique_axis_names,
+    concatenate_axes,
 )
 from ainmax._src.feidhm import constructors, util
 from ainmax._src.sharding import resolve_sharding, ShardingLike
@@ -559,7 +560,7 @@ def linspace(
 
     jax_array = jnp.linspace(start.array, stop.array, axis.size, endpoint=endpoint, retstep=retstep, dtype=dtype)
 
-    out_axes = (axis,) + common_axes
+    out_axes = concatenate_axes((axis,), common_axes)
     step = None
     if retstep:
         jax_array, jax_array_step = jax_array
@@ -607,7 +608,7 @@ def logspace(
 
     jax_array = jnp.logspace(start.array, stop.array, axis.size, endpoint=endpoint, base=base.array, dtype=dtype)
 
-    out_axes = (axis,) + common_axes
+    out_axes = concatenate_axes((axis,), common_axes)
     return constructors.array(jax_array, out_axes, out_sharding=out_sharding)
 
 
@@ -646,7 +647,7 @@ def geomspace(
 
     jax_array = jnp.geomspace(start.array, stop.array, axis.size, endpoint=endpoint, dtype=dtype)
 
-    out_axes = (axis,) + common_axes
+    out_axes = concatenate_axes((axis,), common_axes)
     return constructors.array(jax_array, out_axes, out_sharding=out_sharding)
 
 
